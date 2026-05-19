@@ -1,0 +1,223 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { formatDate } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { ClipboardCheck, Plus, Star } from "lucide-react";
+import { toast } from "sonner";
+import type { Review, Document } from "@/types/database";
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: "bg-slate-100 text-slate-700 dark:bg-slate-800",
+  in_review: "bg-blue-50 text-blue-700 dark:bg-blue-950",
+  changes_requested: "bg-orange-50 text-orange-700 dark:bg-orange-950",
+  approved: "bg-green-50 text-green-700 dark:bg-green-950",
+};
+
+interface Props {
+  params: Promise<{ workspaceId: string }>;
+}
+
+interface ReviewWithDoc extends Review {
+  document?: { title: string };
+}
+
+export default function ReviewsPage({ params }: Props) {
+  const { workspaceId } = use(params);
+  const supabase = createClient();
+  const [reviews, setReviews] = useState<ReviewWithDoc[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: "", document_id: "", due_date: "" });
+  const [feedback, setFeedback] = useState({ text: "", rating: "4" });
+  const [userId, setUserId] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => { if (user) setUserId(user.id); });
+    loadData();
+  }, [workspaceId]);
+
+  async function loadData() {
+    setLoading(true);
+    const [reviewsResult, docsResult] = await Promise.all([
+      supabase.from("reviews").select("*, document:documents(title)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+      supabase.from("documents").select("id, title").eq("workspace_id", workspaceId),
+    ]);
+    setReviews((reviewsResult.data as ReviewWithDoc[]) ?? []);
+    setDocuments((docsResult.data as Document[]) ?? []);
+    setLoading(false);
+  }
+
+  async function handleCreate() {
+    if (!form.title || !form.document_id) { toast.error("Fill in required fields"); return; }
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("reviews").insert({
+      workspace_id: workspaceId,
+      title: form.title,
+      document_id: form.document_id,
+      due_date: form.due_date || null,
+      submitted_by: user?.id,
+    });
+    if (error) { toast.error("Failed to create review"); return; }
+    toast.success("Review submitted!");
+    setDialogOpen(false);
+    setForm({ title: "", document_id: "", due_date: "" });
+    loadData();
+  }
+
+  async function handleFeedback(reviewId: string) {
+    const { error } = await supabase.from("review_assignments").upsert({
+      review_id: reviewId,
+      reviewer_id: userId,
+      feedback: feedback.text,
+      rating: parseInt(feedback.rating),
+      status: "done",
+      submitted_at: new Date().toISOString(),
+    });
+    if (error) { toast.error("Failed to submit feedback"); return; }
+    await supabase.from("reviews").update({ status: "approved" }).eq("id", reviewId);
+    toast.success("Feedback submitted!");
+    setFeedbackDialog(null);
+    setFeedback({ text: "", rating: "4" });
+    loadData();
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto w-full">
+      <div className="flex items-center justify-between mb-6 fade-in stagger-1">
+        <div>
+          <h1 className="text-2xl font-bold">Peer Review</h1>
+          <p className="text-sm text-muted-foreground mt-1">Submit and review team documents</p>
+        </div>
+        <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
+          <Plus className="h-4 w-4" /> Submit for Review
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+      ) : reviews.length === 0 ? (
+        <div className="flex flex-col items-center py-20 text-center fade-in stagger-2">
+          <ClipboardCheck className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="font-semibold mb-2">No reviews yet</h3>
+          <p className="text-sm text-muted-foreground">Submit a document for peer review.</p>
+        </div>
+      ) : (
+        <div className="space-y-4 fade-in stagger-2">
+          {reviews.map((review) => (
+            <Card key={review.id} className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">{review.title}</CardTitle>
+                    {review.document && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Document: {review.document.title}
+                      </p>
+                    )}
+                  </div>
+                  <Badge className={`text-xs capitalize ${STATUS_COLORS[review.status]}`}>
+                    {review.status.replace("_", " ")}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground">
+                    Submitted {formatDate(review.created_at)}
+                    {review.due_date && ` · Due ${formatDate(review.due_date)}`}
+                  </div>
+                  {review.submitted_by !== userId && review.status !== "approved" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="pressable"
+                      onClick={() => setFeedbackDialog(review.id)}
+                    >
+                      <Star className="h-3.5 w-3.5 mr-1" /> Give Feedback
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Submit dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Submit for Review</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Review title *</Label>
+              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Q3 DCF Analysis Review" className="h-10" />
+            </div>
+            <div className="space-y-2">
+              <Label>Document *</Label>
+              <Select value={form.document_id} onValueChange={(v) => setForm({ ...form, document_id: v })}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Select a document" /></SelectTrigger>
+                <SelectContent>
+                  {documents.map((doc) => (
+                    <SelectItem key={doc.id} value={doc.id}>{doc.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Due date (optional)</Label>
+              <Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="h-10" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleCreate} className="pressable">Submit</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback dialog */}
+      <Dialog open={!!feedbackDialog} onOpenChange={() => setFeedbackDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Submit Feedback</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Rating (1-5)</Label>
+              <Select value={feedback.rating} onValueChange={(v) => setFeedback({ ...feedback, rating: v })}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((r) => (
+                    <SelectItem key={r} value={String(r)}>
+                      {"★".repeat(r)}{"☆".repeat(5 - r)} ({r}/5)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Feedback</Label>
+              <Textarea value={feedback.text} onChange={(e) => setFeedback({ ...feedback, text: e.target.value })} placeholder="Detailed feedback…" rows={4} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setFeedbackDialog(null)}>Cancel</Button>
+              <Button onClick={() => feedbackDialog && handleFeedback(feedbackDialog)} className="pressable">Submit Feedback</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

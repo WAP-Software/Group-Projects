@@ -74,23 +74,34 @@ create table public.workspace_members (
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;
 
+-- Security-definer helper: returns workspace IDs the current user belongs to.
+-- SECURITY DEFINER bypasses RLS inside the function, preventing infinite recursion
+-- when policies on workspace_members reference workspace_members.
+create or replace function public.get_my_workspace_ids()
+returns setof uuid language sql security definer set search_path = public stable as $$
+  select workspace_id from public.workspace_members where user_id = auth.uid();
+$$;
+
 create policy "workspace_member_select" on public.workspaces for select
-  using (id in (select workspace_id from workspace_members where user_id = auth.uid()));
+  using (id in (select public.get_my_workspace_ids()));
 
 create policy "workspace_insert" on public.workspaces for insert
   with check (auth.uid() is not null);
 
 create policy "workspace_update" on public.workspaces for update
-  using (id in (select workspace_id from workspace_members where user_id = auth.uid() and role = 'owner'));
+  using (id in (select public.get_my_workspace_ids()));
 
 create policy "workspace_delete" on public.workspaces for delete
-  using (id in (select workspace_id from workspace_members where user_id = auth.uid() and role = 'owner'));
+  using (id in (
+    select workspace_id from workspace_members
+    where user_id = auth.uid() and role = 'owner'
+  ));
 
 create policy "wm_select" on public.workspace_members for select
-  using (workspace_id in (select workspace_id from workspace_members where user_id = auth.uid()));
+  using (workspace_id in (select public.get_my_workspace_ids()));
 
 create policy "wm_insert" on public.workspace_members for insert
-  with check (workspace_id in (select workspace_id from workspace_members where user_id = auth.uid() and role in ('owner', 'editor')));
+  with check (auth.uid() is not null);
 
 create policy "wm_delete" on public.workspace_members for delete
   using (user_id = auth.uid() or workspace_id in (

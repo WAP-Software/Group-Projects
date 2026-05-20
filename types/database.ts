@@ -127,6 +127,9 @@ export interface FileRecord {
   uploaded_by: string | null;
   description: string | null;
   tags: string[] | null;
+  is_pinned: boolean;
+  deadline_date: string | null;
+  external_url: string | null;
   created_at: string;
 }
 

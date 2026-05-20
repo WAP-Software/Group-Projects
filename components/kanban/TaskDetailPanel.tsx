@@ -93,17 +93,24 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
 
   async function handleFieldChange(field: keyof Task, value: any) {
     if (!task) return;
+    const prev = task;
     setTask({ ...task, [field]: value } as Task);
-    await onUpdate(task.id, { [field]: value });
+    const error = await onUpdate(task.id, { [field]: value });
+    if (error) {
+      setTask(prev);
+      toast.error("Failed to save — check your connection");
+    }
   }
 
   function handleDescriptionChange(value: string) {
     if (!task) return;
     setTask({ ...task, description: value });
     if (descSaveRef.current) clearTimeout(descSaveRef.current);
+    const taskId = task.id;
     descSaveRef.current = setTimeout(async () => {
       setSaving(true);
-      await onUpdate(task.id, { description: value });
+      const error = await onUpdate(taskId, { description: value });
+      if (error) toast.error("Failed to save description");
       setSaving(false);
     }, 1200);
   }

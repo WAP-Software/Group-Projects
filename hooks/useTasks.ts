@@ -98,6 +98,15 @@ export function useTasks(workspaceId: string) {
 
   async function updateTask(id: string, data: Partial<Task>) {
     const { error } = await supabase.from("tasks").update(data as any).eq("id", id);
+    if (!error) {
+      setTasks((prev) => {
+        const updated = { ...prev };
+        for (const col of COLUMNS) {
+          updated[col] = updated[col].map((t) => (t.id === id ? { ...t, ...data } : t));
+        }
+        return updated;
+      });
+    }
     return error;
   }
 

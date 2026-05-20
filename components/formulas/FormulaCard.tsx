@@ -29,9 +29,13 @@ function renderLatex(latex: string): string {
 export function FormulaCard({ formula, onEdit, onDelete, editable = false }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  function copyLatex() {
-    navigator.clipboard.writeText(formula.latex);
-    toast.success("LaTeX copied!");
+  async function copyLatex() {
+    try {
+      await navigator.clipboard.writeText(formula.latex);
+      toast.success("LaTeX copied!");
+    } catch {
+      toast.error("Clipboard access denied");
+    }
   }
 
   return (

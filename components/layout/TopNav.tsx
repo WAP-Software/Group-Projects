@@ -36,7 +36,6 @@ import {
   ClipboardCheck,
   BarChart3,
   Vote,
-  Calendar,
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
@@ -51,7 +50,7 @@ const WORKSPACE_NAV = [
   { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
   { href: "/contributions", label: "Contributions", icon: BarChart3 },
   { href: "/polls", label: "Polls", icon: Vote },
-  { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface TopNavProps {

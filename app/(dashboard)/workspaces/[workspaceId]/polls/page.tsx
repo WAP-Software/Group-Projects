@@ -40,14 +40,14 @@ export default function PollsPage({ params }: Props) {
     loadPolls();
     const sub = supabase
       .channel(`polls:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "polls", filter: `workspace_id=eq.${workspaceId}` }, loadPolls)
-      .on("postgres_changes", { event: "*", schema: "public", table: "poll_votes" }, loadPolls)
+      .on("postgres_changes", { event: "*", schema: "public", table: "polls", filter: `workspace_id=eq.${workspaceId}` }, () => loadPolls(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "poll_votes" }, () => loadPolls(true))
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
-  async function loadPolls() {
-    setLoading(true);
+  async function loadPolls(silent = false) {
+    if (!silent) setLoading(true);
     const { data } = await supabase
       .from("polls")
       .select("*")

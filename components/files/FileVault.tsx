@@ -45,8 +45,8 @@ export function FileVault({ workspaceId }: Props) {
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const dragCounter = useRef(0);
 
-  const loadFiles = useCallback(async () => {
-    setLoading(true);
+  const loadFiles = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const { data } = await supabase
       .from("files")
       .select("*")
@@ -60,7 +60,7 @@ export function FileVault({ workspaceId }: Props) {
     loadFiles();
     const sub = supabase
       .channel(`files:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "files", filter: `workspace_id=eq.${workspaceId}` }, loadFiles)
+      .on("postgres_changes", { event: "*", schema: "public", table: "files", filter: `workspace_id=eq.${workspaceId}` }, () => loadFiles(true))
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [loadFiles, workspaceId]);

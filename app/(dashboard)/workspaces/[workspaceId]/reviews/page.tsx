@@ -58,14 +58,14 @@ export default function ReviewsPage({ params }: Props) {
     loadData();
     const sub = supabase
       .channel(`reviews:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `workspace_id=eq.${workspaceId}` }, loadData)
-      .on("postgres_changes", { event: "*", schema: "public", table: "review_assignments" }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `workspace_id=eq.${workspaceId}` }, () => loadData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "review_assignments" }, () => loadData(true))
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(silent = false) {
+    if (!silent) setLoading(true);
     const [reviewsResult, filesResult] = await Promise.all([
       supabase
         .from("reviews")
@@ -220,10 +220,10 @@ export default function ReviewsPage({ params }: Props) {
             </div>
             <div className="space-y-2">
               <Label>File (optional)</Label>
-              <Select value={form.file_id} onValueChange={(v) => setForm({ ...form, file_id: v })}>
+              <Select value={form.file_id || "__none__"} onValueChange={(v) => setForm({ ...form, file_id: v === "__none__" ? "" : v })}>
                 <SelectTrigger className="h-10"><SelectValue placeholder="Select a file" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No file</SelectItem>
+                  <SelectItem value="__none__">No file</SelectItem>
                   {files.map((f) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}

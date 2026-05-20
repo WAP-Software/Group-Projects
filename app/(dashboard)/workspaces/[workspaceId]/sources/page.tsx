@@ -67,13 +67,13 @@ export default function SourcesPage({ params }: Props) {
     loadSources();
     const sub = supabase
       .channel(`sources:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "sources", filter: `workspace_id=eq.${workspaceId}` }, loadSources)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sources", filter: `workspace_id=eq.${workspaceId}` }, () => loadSources(true))
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
-  async function loadSources() {
-    setLoading(true);
+  async function loadSources(silent = false) {
+    if (!silent) setLoading(true);
     const { data } = await supabase
       .from("sources")
       .select("*")

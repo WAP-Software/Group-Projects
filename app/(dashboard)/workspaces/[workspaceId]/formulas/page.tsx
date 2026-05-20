@@ -40,13 +40,13 @@ export default function FormulasPage({ params }: Props) {
     loadFormulas();
     const sub = supabase
       .channel(`formulas:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "formulas", filter: `workspace_id=eq.${workspaceId}` }, loadFormulas)
+      .on("postgres_changes", { event: "*", schema: "public", table: "formulas", filter: `workspace_id=eq.${workspaceId}` }, () => loadFormulas(true))
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
-  async function loadFormulas() {
-    setLoading(true);
+  async function loadFormulas(silent = false) {
+    if (!silent) setLoading(true);
     const { data } = await supabase
       .from("formulas")
       .select("*")

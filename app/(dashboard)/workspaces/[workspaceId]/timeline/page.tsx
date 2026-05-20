@@ -20,12 +20,12 @@ export default function TimelinePage({ params }: Props) {
       <div className="flex items-start justify-between mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">
-            {view === "timeline" ? "Project Timeline" : "Kalender"}
+            {view === "timeline" ? "Project Timeline" : "Calendar"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {view === "timeline"
-              ? "Tasks & Reviews nach Deadline — tagesgenau"
-              : "Monatsübersicht aller Deadlines"}
+              ? "Tasks & reviews by deadline — day by day"
+              : "Monthly overview of all deadlines"}
           </p>
         </div>
 
@@ -51,7 +51,7 @@ export default function TimelinePage({ params }: Props) {
             }`}
           >
             <CalendarDays className="h-3.5 w-3.5" />
-            Kalender
+            Calendar
           </button>
         </div>
       </div>

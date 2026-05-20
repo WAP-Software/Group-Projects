@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getFileUrl, downloadFile, uploadToR2 } from "@/lib/cloudflare/r2";
+import { getFileUrl, downloadFile, uploadToR2, deleteFromR2 } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,10 +45,10 @@ const REVIEW_STATUS_COLOR: Record<string, string> = {
 };
 
 const REVIEW_STATUS_LABEL: Record<string, string> = {
-  pending: "Ausstehend",
-  in_review: "In Prüfung",
-  changes_requested: "Änderungen nötig",
-  approved: "Genehmigt",
+  pending: "Pending",
+  in_review: "In Review",
+  changes_requested: "Changes Requested",
+  approved: "Approved",
 };
 
 function fileTypeIcon(mime: string | null) {
@@ -137,8 +138,9 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
     const previewType = canPreview(file.mime_type);
     if (previewType === "csv" && file.r2_key) {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const url = getFileUrl(file.r2_key);
-        const res = await fetch(url);
+        const res = await fetch(url, session?.access_token ? { headers: { Authorization: `Bearer ${session.access_token}` } } : undefined);
         const text = await res.text();
         const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
         setCsvData(parsed.data.slice(0, 50));
@@ -171,7 +173,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
     if (!file) return;
     await supabase.from("files").update({ tags }).eq("id", file.id);
     setEditingTags(false);
-    toast.success("Tags gespeichert");
+    toast.success("Tags saved");
     onRefresh?.();
   }
 
@@ -206,11 +208,27 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
         tags: file.tags,
         is_pinned: false,
       });
-      toast.success(`Version ${newVersion} hochgeladen`);
+
+      // Enforce max 3 versions: delete oldest if exceeded
+      const { data: allVersions } = await supabase
+        .from("files")
+        .select("id, r2_key, version")
+        .eq("workspace_id", workspaceId)
+        .eq("original_name", file.original_name)
+        .order("version", { ascending: true });
+      if (allVersions && allVersions.length > 3) {
+        const toDelete = allVersions.slice(0, allVersions.length - 3);
+        for (const v of toDelete) {
+          if (v.r2_key) await deleteFromR2(v.r2_key, token).catch(() => {});
+          await supabase.from("files").delete().eq("id", v.id);
+        }
+      }
+
+      toast.success(`Version ${newVersion} uploaded`);
       load();
       onRefresh?.();
     } catch {
-      toast.error("Upload fehlgeschlagen");
+      toast.error("Upload failed");
     } finally {
       setNewVersionUploading(false);
     }
@@ -219,7 +237,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   async function startReview() {
     if (!file) return;
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error("Nicht authentifiziert"); return; }
+    if (!user) { toast.error("Not authenticated"); return; }
     const { data, error } = await supabase.from("reviews").insert({
       workspace_id: workspaceId,
       document_id: file.id,
@@ -227,8 +245,8 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
       status: "pending",
       submitted_by: user.id,
     }).select().single();
-    if (error) { toast.error("Review konnte nicht erstellt werden"); return; }
-    toast.success("Peer Review gestartet!");
+    if (error) { toast.error("Review could not be created"); return; }
+    toast.success("Peer review started!");
     setLinkedReviews((r) => [...r, data as Review]);
   }
 
@@ -258,7 +276,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   {file.mime_type && !file.external_url && (
                     <Badge variant="secondary" className="text-xs">{file.mime_type.split("/")[1]?.toUpperCase() ?? file.mime_type}</Badge>
                   )}
-                  {file.external_url && <Badge variant="secondary" className="text-xs">Externer Link</Badge>}
+                  {file.external_url && <Badge variant="secondary" className="text-xs">External link</Badge>}
                   {file.size_bytes ? <span className="text-xs text-muted-foreground">{formatBytes(file.size_bytes)}</span> : null}
                   <span className="text-xs text-muted-foreground">{formatDate(file.created_at)}</span>
                   {file.version > 1 && <Badge variant="outline" className="text-xs">v{file.version}</Badge>}
@@ -275,13 +293,13 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   target="_blank"
                   rel="noopener noreferrer"
                   className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
-                  aria-label="Link öffnen"
+                  aria-label="Open link"
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
               ) : (
                 <button
-                  onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download fehlgeschlagen"))}
+                  onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download failed"))}
                   className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
                   aria-label="Download"
                 >
@@ -308,7 +326,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
-                    placeholder="Tag eingeben…"
+                    placeholder="Enter tag…"
                     className="h-6 text-xs w-28 px-2"
                     autoFocus
                   />
@@ -325,7 +343,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   onClick={() => setEditingTags(true)}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
                 >
-                  <Tag className="h-3 w-3" /> Tags bearbeiten
+                  <Tag className="h-3 w-3" /> Edit tags
                 </button>
               )}
             </div>
@@ -343,7 +361,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   <button
                     onClick={() => setPdfFullscreen(true)}
                     className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-md bg-background/80 border border-border hover:bg-background transition-colors"
-                    aria-label="Vollbild"
+                    aria-label="Fullscreen"
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
@@ -384,7 +402,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
               <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
                 <Link2 className="h-5 w-5 text-blue-500" />
               </div>
-              <p className="text-sm text-muted-foreground">Externer Link</p>
+              <p className="text-sm text-muted-foreground">External link</p>
               <a
                 href={file.external_url}
                 target="_blank"
@@ -402,10 +420,10 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
               <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
                 {fileTypeIcon(file.mime_type)}
               </div>
-              <p className="text-sm text-muted-foreground">Keine Vorschau verfügbar</p>
+              <p className="text-sm text-muted-foreground">No preview available</p>
               {fileUrl && (
                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-primary hover:underline">
-                  <ExternalLink className="h-3.5 w-3.5" /> Datei öffnen
+                  <ExternalLink className="h-3.5 w-3.5" /> Open file
                 </a>
               )}
             </div>
@@ -415,9 +433,9 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
           <Tabs defaultValue="comments" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="rounded-none border-b border-border bg-transparent h-10 px-3 justify-start gap-0 shrink-0 overflow-x-auto">
               {[
-                { value: "comments", label: "Kommentare", count: tabCount.comments },
+                { value: "comments", label: "Comments", count: tabCount.comments },
                 { value: "tasks", label: "Tasks", count: tabCount.tasks },
-                { value: "versions", label: "Versionen", count: tabCount.versions },
+                { value: "versions", label: "Versions", count: tabCount.versions },
                 { value: "reviews", label: "Reviews", count: tabCount.reviews },
               ].map(({ value, label, count }) => (
                 <TabsTrigger
@@ -438,7 +456,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   {loading ? (
                     <div className="space-y-3"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
                   ) : comments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">Noch keine Kommentare — starte die Diskussion!</p>
+                    <p className="text-sm text-muted-foreground text-center py-8">No comments yet — start the discussion!</p>
                   ) : (
                     comments.map((cm) => {
                       const p = (cm as any).profile as Profile | null;
@@ -461,7 +479,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                             <button
                               onClick={() => deleteComment(cm.id)}
                               className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0 mt-1"
-                              aria-label="Löschen"
+                              aria-label="Delete"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -477,7 +495,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   <Textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Kommentar schreiben… @Name für Mentions"
+                    placeholder="Write a comment… @Name to mention someone"
                     rows={2}
                     className="resize-none text-sm"
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(); } }}
@@ -499,7 +517,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   className="h-9 w-9 shrink-0 self-end pressable"
                   onClick={addComment}
                   disabled={!newComment.trim()}
-                  aria-label="Senden"
+                  aria-label="Send"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -514,8 +532,8 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                 ) : linkedTasks.length === 0 ? (
                   <div className="text-center py-10">
                     <Kanban className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">Noch keine Tasks verknüpft.</p>
-                    <p className="text-xs text-muted-foreground mt-1">Datei über das Kanban-Board mit einem Task verbinden.</p>
+                    <p className="text-sm text-muted-foreground">No tasks linked yet.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Link this file to a task via the Kanban board.</p>
                   </div>
                 ) : (
                   linkedTasks.map((task) => (
@@ -550,13 +568,13 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
             <TabsContent value="versions" className="flex-1 overflow-y-auto m-0">
               <div className="p-5 space-y-3">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Versionshistorie</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Version history</p>
                   {!file.external_url && (
                     <label className="cursor-pointer">
                       <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" disabled={newVersionUploading} asChild>
                         <span>
                           <Upload className="h-3 w-3" />
-                          {newVersionUploading ? "Lädt hoch…" : "Neue Version"}
+                          {newVersionUploading ? "Uploading…" : "New version"}
                         </span>
                       </Button>
                       <input
@@ -573,7 +591,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                 ) : versions.length === 0 ? (
                   <div className="text-center py-8">
                     <History className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">Noch keine Versionen.</p>
+                    <p className="text-sm text-muted-foreground">No versions yet.</p>
                   </div>
                 ) : (
                   versions.map((v) => (
@@ -591,7 +609,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                       {v.id === file.id && <Badge className="text-xs shrink-0">Aktuell</Badge>}
                       {v.r2_key && (
                         <button
-                          onClick={() => downloadFile(v.r2_key, v.original_name).catch(() => toast.error("Fehler"))}
+                          onClick={() => downloadFile(v.r2_key, v.original_name).catch(() => toast.error("Download failed"))}
                           className="shrink-0 flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -607,18 +625,18 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
             <TabsContent value="reviews" className="flex-1 overflow-y-auto m-0">
               <div className="p-5 space-y-3">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Peer Reviews</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Peer reviews</p>
                   {!file.external_url && (
                     <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={startReview}>
-                      <ClipboardCheck className="h-3 w-3" /> Review starten
+                      <ClipboardCheck className="h-3 w-3" /> Start review
                     </Button>
                   )}
                 </div>
                 {linkedReviews.length === 0 ? (
                   <div className="text-center py-8">
                     <ClipboardCheck className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">Kein Review gestartet.</p>
-                    <p className="text-xs text-muted-foreground mt-1">Klicke "Review starten" um ein Peer Review für diese Datei zu erstellen.</p>
+                    <p className="text-sm text-muted-foreground">No review started yet.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click "Start review" to create a peer review for this file.</p>
                   </div>
                 ) : (
                   linkedReviews.map((r) => (
@@ -643,6 +661,8 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
       {/* PDF Fullscreen */}
       <Dialog open={pdfFullscreen} onOpenChange={setPdfFullscreen}>
         <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 flex flex-col gap-0">
+          <VisuallyHidden><DialogTitle>{file.name}</DialogTitle></VisuallyHidden>
+          <VisuallyHidden><DialogDescription>PDF preview</DialogDescription></VisuallyHidden>
           <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
             <span className="text-sm font-medium truncate">{file.name}</span>
             <div className="flex items-center gap-2">

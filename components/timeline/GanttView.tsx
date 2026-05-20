@@ -41,10 +41,10 @@ const REVIEW_STATUS_COLOR: Record<string, string> = {
 };
 
 const REVIEW_STATUS_LABEL: Record<string, string> = {
-  pending: "Ausstehend",
+  pending: "Pending",
   in_review: "In Review",
-  changes_requested: "Änderungen",
-  approved: "Genehmigt",
+  changes_requested: "Changes Requested",
+  approved: "Approved",
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -181,8 +181,8 @@ export function GanttView({ workspaceId }: Props) {
     return (
       <div className="flex flex-col items-center py-20 text-center">
         <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="font-semibold mb-2">Noch keine Einträge</h3>
-        <p className="text-sm text-muted-foreground">Erstelle Tasks oder Reviews um sie hier zu sehen.</p>
+        <h3 className="font-semibold mb-2">No entries yet</h3>
+        <p className="text-sm text-muted-foreground">Create tasks or reviews to see them here.</p>
       </div>
     );
   }
@@ -198,7 +198,7 @@ export function GanttView({ workspaceId }: Props) {
           {(rangeStart || rangeEnd) && (
             <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground"
               onClick={() => { setRangeStart(""); setRangeEnd(""); }}>
-              Zurücksetzen
+              Reset
             </Button>
           )}
         </div>
@@ -220,7 +220,7 @@ export function GanttView({ workspaceId }: Props) {
       {/* ── Vertical timeline ── */}
       {dayGroups.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          Keine Einträge im gewählten Zeitraum.
+          No entries in the selected time range.
         </div>
       ) : (
         <div className="relative">
@@ -229,8 +229,8 @@ export function GanttView({ workspaceId }: Props) {
           <div className="space-y-0">
             {dayGroups.map((group) => {
               const d = new Date(group.key + "T12:00:00");
-              const weekday = d.toLocaleDateString("de-DE", { weekday: "short" });
-              const dayNum = d.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+              const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+              const dayNum = d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
               const yearStr = d.getFullYear().toString();
 
               const hasOverdue = group.isPast && group.items.some(
@@ -268,11 +268,11 @@ export function GanttView({ workspaceId }: Props) {
                   <div className="flex-1 pl-6 pt-2 pb-6">
                     {group.isToday && (
                       <div className="mb-2">
-                        <Badge className="text-xs bg-primary text-primary-foreground">Heute</Badge>
+                        <Badge className="text-xs bg-primary text-primary-foreground">Today</Badge>
                       </div>
                     )}
                     {group.items.length === 0 && (
-                      <p className="text-xs text-muted-foreground italic pt-1">Keine Aufgaben</p>
+                      <p className="text-xs text-muted-foreground italic pt-1">No tasks</p>
                     )}
                     <div className="space-y-2">
                       {group.items.map((item) => {
@@ -306,10 +306,10 @@ export function GanttView({ workspaceId }: Props) {
                                   </span>
                                   {task.start_date && (
                                     <span className="text-[11px] text-muted-foreground">
-                                      ab {new Date(task.start_date).toLocaleDateString("de-DE", { day: "numeric", month: "short" })}
+                                      from {new Date(task.start_date).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
                                     </span>
                                   )}
-                                  {isOverdue && <span className="text-[11px] font-semibold text-red-500">Überfällig</span>}
+                                  {isOverdue && <span className="text-[11px] font-semibold text-red-500">Overdue</span>}
                                 </div>
                               </div>
                               <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0 font-medium", PRIORITY_COLOR[task.priority])}>
@@ -350,7 +350,7 @@ export function GanttView({ workspaceId }: Props) {
                                 <span className="text-[11px] font-medium" style={{ color }}>
                                   {REVIEW_STATUS_LABEL[review.status]}
                                 </span>
-                                {isOverdue && <span className="text-[11px] font-semibold text-red-500">Überfällig</span>}
+                                {isOverdue && <span className="text-[11px] font-semibold text-red-500">Overdue</span>}
                               </div>
                             </div>
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400">
@@ -372,7 +372,7 @@ export function GanttView({ workspaceId }: Props) {
       {unscheduled.length > 0 && (
         <div className="border border-border/50 rounded-xl overflow-hidden bg-card">
           <div className="px-4 py-2.5 border-b border-border/30 bg-muted/30 flex items-center gap-2">
-            <span className="text-xs font-semibold">Kein Datum</span>
+            <span className="text-xs font-semibold">No date</span>
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{unscheduled.length}</Badge>
           </div>
           <div className="divide-y divide-border/20">

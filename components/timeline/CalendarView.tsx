@@ -22,7 +22,7 @@ interface CalEvent {
 
 type Member = { user_id: string; role: string; profile: Profile };
 
-const DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const TYPE_STYLE: Record<string, string> = {
   task: "bg-blue-500",
@@ -33,7 +33,7 @@ const TYPE_STYLE: Record<string, string> = {
 const TYPE_LABEL: Record<string, string> = {
   task: "Task",
   review: "Review",
-  poll: "Umfrage",
+  poll: "Poll",
 };
 
 interface Props {
@@ -133,14 +133,14 @@ export function CalendarView({ workspaceId }: Props) {
       {/* Month nav */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">
-          {currentDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
+          {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
         </h2>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="pressable" onClick={() => setCurrentDate(new Date(year, month - 1, 1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" className="pressable" onClick={() => setCurrentDate(new Date())}>
-            Heute
+            Today
           </Button>
           <Button variant="ghost" size="icon" className="pressable" onClick={() => setCurrentDate(new Date(year, month + 1, 1))}>
             <ChevronRight className="h-4 w-4" />
@@ -198,7 +198,7 @@ export function CalendarView({ workspaceId }: Props) {
                           </div>
                         ))}
                         {dayEvs.length > 3 && (
-                          <span className="text-[10px] text-muted-foreground">+{dayEvs.length - 3} weitere</span>
+                          <span className="text-[10px] text-muted-foreground">+{dayEvs.length - 3} more</span>
                         )}
                       </div>
                     </>
@@ -212,7 +212,7 @@ export function CalendarView({ workspaceId }: Props) {
 
       {/* Upcoming deadlines */}
       <div>
-        <h3 className="text-sm font-semibold mb-3">Nächste Deadlines</h3>
+        <h3 className="text-sm font-semibold mb-3">Upcoming Deadlines</h3>
         <div className="space-y-2">
           {events.filter((e) => new Date(e.date) >= today).slice(0, 8).map((ev) => (
             <div
@@ -227,7 +227,7 @@ export function CalendarView({ workspaceId }: Props) {
             </div>
           ))}
           {!events.filter((e) => new Date(e.date) >= today).length && (
-            <p className="text-sm text-muted-foreground text-center py-4">Keine bevorstehenden Deadlines</p>
+            <p className="text-sm text-muted-foreground text-center py-4">No upcoming deadlines</p>
           )}
         </div>
       </div>

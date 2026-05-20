@@ -42,6 +42,7 @@ const WORKSPACE_LINKS = [
   { href: "/contributions", label: "Contributions", icon: BarChart3 },
   { href: "/polls", label: "Polls", icon: Vote },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface SidebarProps {

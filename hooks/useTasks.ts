@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useOptimistic } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Task } from "@/types/database";
 
@@ -14,16 +14,11 @@ export function useTasks(workspaceId: string) {
   const [subtaskCounts, setSubtaskCounts] = useState<Record<string, { total: number; done: number }>>({});
   const [fileCounts, setFileCounts] = useState<Record<string, number>>({});
 
-  const [optimisticTasks, setOptimisticTasks] = useOptimistic(
-    tasks,
-    (_state: TasksByStatus, updated: TasksByStatus) => updated,
-  );
-
   useEffect(() => {
     if (!workspaceId) return;
 
-    async function load() {
-      setLoading(true);
+    async function load(silent = false) {
+      if (!silent) setLoading(true);
       const { data } = await supabase
         .from("tasks")
         .select("*")
@@ -65,9 +60,9 @@ export function useTasks(workspaceId: string) {
 
     const sub = supabase
       .channel(`tasks:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `workspace_id=eq.${workspaceId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_subtasks" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_files" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `workspace_id=eq.${workspaceId}` }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_subtasks" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_files" }, () => load(true))
       .subscribe();
 
     return () => { supabase.removeChannel(sub); };
@@ -78,11 +73,12 @@ export function useTasks(workspaceId: string) {
     const task = allTasks.find((t) => t.id === taskId);
     if (!task) return;
 
+    // Optimistically update state before the DB call
     const updated: TasksByStatus = { ...tasks };
     updated[task.status as keyof TasksByStatus] = updated[task.status as keyof TasksByStatus].filter((t) => t.id !== taskId);
     const moved = { ...task, status: newStatus, position: newPosition };
     updated[newStatus] = [...updated[newStatus].slice(0, newPosition), moved, ...updated[newStatus].slice(newPosition)];
-    setOptimisticTasks(updated);
+    setTasks(updated);
 
     await supabase.from("tasks").update({ status: newStatus, position: newPosition }).eq("id", taskId);
   }
@@ -114,5 +110,5 @@ export function useTasks(workspaceId: string) {
     await supabase.from("tasks").delete().eq("id", id);
   }
 
-  return { tasks: optimisticTasks, loading, moveTask, createTask, updateTask, deleteTask, subtaskCounts, fileCounts };
+  return { tasks, loading, moveTask, createTask, updateTask, deleteTask, subtaskCounts, fileCounts };
 }

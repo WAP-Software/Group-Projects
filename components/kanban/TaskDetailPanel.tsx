@@ -16,9 +16,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
-  Flag, Calendar, User, Trash2, Plus, Send,
+  Flag, Calendar, Clock, User, Trash2, Plus, Send,
   Download, X, File, FileText, ImageIcon, Upload, CloudUpload,
 } from "lucide-react";
+
+function parseDueDate(due_date: string | null): { date: string; time: string } {
+  if (!due_date) return { date: "", time: "12:00" };
+  if (due_date.length <= 10) return { date: due_date, time: "12:00" };
+  const d = new Date(due_date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
+}
+
+function combineDueDateTime(date: string, time: string): string | null {
+  if (!date) return null;
+  return new Date(`${date}T${time || "12:00"}`).toISOString();
+}
 import { toast } from "sonner";
 import type { Task, TaskSubtask, TaskComment, FileRecord, Profile } from "@/types/database";
 
@@ -287,13 +304,26 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                     </SelectContent>
                   </Select>
 
-                  <div className="flex items-center gap-1.5 h-7 px-2 rounded-md border border-border/60 text-xs text-muted-foreground">
-                    <Calendar className="h-3 w-3" />
+                  <div className="flex items-center gap-1 h-7 px-2 rounded-md border border-border/60 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3 shrink-0" />
                     <input
                       type="date"
-                      value={task.due_date ?? ""}
-                      onChange={(e) => handleFieldChange("due_date", e.target.value || null)}
-                      className="bg-transparent border-none outline-none text-xs w-28"
+                      value={parseDueDate(task.due_date).date}
+                      onChange={(e) => {
+                        const { time } = parseDueDate(task.due_date);
+                        handleFieldChange("due_date", combineDueDateTime(e.target.value, time));
+                      }}
+                      className="bg-transparent border-none outline-none text-xs w-24"
+                    />
+                    <Clock className="h-3 w-3 shrink-0 ml-1" />
+                    <input
+                      type="time"
+                      value={parseDueDate(task.due_date).time}
+                      onChange={(e) => {
+                        const { date } = parseDueDate(task.due_date);
+                        if (date) handleFieldChange("due_date", combineDueDateTime(date, e.target.value));
+                      }}
+                      className="bg-transparent border-none outline-none text-xs w-16"
                     />
                   </div>
 

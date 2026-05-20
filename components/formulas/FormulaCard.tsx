@@ -1,6 +1,6 @@
 "use client";
 
-import { BlockMath } from "react-katex";
+import katex from "katex";
 import "katex/dist/katex.min.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,14 @@ interface Props {
   onEdit?: (formula: Formula) => void;
   onDelete?: (id: string) => void;
   editable?: boolean;
+}
+
+function renderLatex(latex: string): string {
+  return katex.renderToString(latex, {
+    displayMode: true,
+    throwOnError: false,
+    output: "html",
+  });
 }
 
 export function FormulaCard({ formula, onEdit, onDelete, editable = false }: Props) {
@@ -31,34 +39,16 @@ export function FormulaCard({ formula, onEdit, onDelete, editable = false }: Pro
             <Badge variant="secondary" className="text-xs">{formula.category}</Badge>
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 pressable"
-              onClick={copyLatex}
-              aria-label="Copy LaTeX"
-            >
+            <Button variant="ghost" size="icon" className="h-7 w-7 pressable" onClick={copyLatex} aria-label="Copy LaTeX">
               <Copy className="h-3.5 w-3.5" />
             </Button>
             {editable && onEdit && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 pressable"
-                onClick={() => onEdit(formula)}
-                aria-label="Edit formula"
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 pressable" onClick={() => onEdit(formula)} aria-label="Edit formula">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
             )}
             {editable && onDelete && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 pressable text-destructive hover:text-destructive"
-                onClick={() => onDelete(formula.id)}
-                aria-label="Delete formula"
-              >
+              <Button variant="ghost" size="icon" className="h-7 w-7 pressable text-destructive hover:text-destructive" onClick={() => onDelete(formula.id)} aria-label="Delete formula">
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             )}
@@ -66,23 +56,17 @@ export function FormulaCard({ formula, onEdit, onDelete, editable = false }: Pro
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="rounded-lg bg-muted/50 p-3 overflow-x-auto">
-          <BlockMath
-            math={formula.latex}
-            renderError={(err) => (
-              <code className="text-xs text-destructive font-mono break-all">{formula.latex}</code>
-            )}
-          />
-        </div>
+        <div
+          className="rounded-lg bg-muted/50 p-3 overflow-x-auto katex-display-wrap"
+          dangerouslySetInnerHTML={{ __html: renderLatex(formula.latex) }}
+        />
         {formula.description && (
           <p className="text-xs text-muted-foreground leading-relaxed">{formula.description}</p>
         )}
         {formula.tags && formula.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {formula.tags.map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0">
-                {tag}
-              </Badge>
+              <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0">{tag}</Badge>
             ))}
           </div>
         )}

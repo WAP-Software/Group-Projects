@@ -64,9 +64,9 @@ export function KanbanBoard({ workspaceId }: Props) {
 
   if (loading) {
     return (
-      <div className="flex gap-4 p-6 overflow-x-auto">
+      <div className="flex flex-col sm:flex-row gap-4 p-6 sm:overflow-x-auto">
         {COLUMNS.map((col) => (
-          <div key={col.id} className="w-72 shrink-0 space-y-3">
+          <div key={col.id} className="w-full sm:w-72 shrink-0 space-y-3">
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-16 w-full" />
@@ -112,7 +112,7 @@ export function KanbanBoard({ workspaceId }: Props) {
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex gap-4 p-6 overflow-x-auto min-h-[calc(100vh-10rem)] items-start">
+        <div className="flex flex-col sm:flex-row gap-4 p-4 sm:p-6 sm:overflow-x-auto min-h-[calc(100vh-10rem)] items-start">
           {COLUMNS.map((col) => (
             <KanbanColumn
               key={col.id}

@@ -54,7 +54,7 @@ export function KanbanColumn({
   }
 
   return (
-    <div className="w-72 shrink-0 rounded-xl flex flex-col" style={{ backgroundColor: BG[columnId] }}>
+    <div className="w-full sm:w-72 shrink-0 rounded-xl flex flex-col" style={{ backgroundColor: BG[columnId] }}>
       <div className="flex items-center gap-2 px-3 py-3">
         <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${colorClass}`} />
         <span className="text-sm font-semibold text-foreground">{label}</span>

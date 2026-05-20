@@ -11,6 +11,25 @@ import {
   Calendar, FolderOpen, Zap, File,
 } from "lucide-react";
 
+function mimeLabel(mime: string | null): string {
+  if (!mime) return "File";
+  const known: Record<string, string> = {
+    "text/uri-list": "Link",
+    "application/pdf": "PDF",
+    "text/plain": "TXT",
+    "text/csv": "CSV",
+    "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+    "vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+    "vnd.ms-excel": "XLS",
+    "vnd.ms-powerpoint": "PPT",
+  };
+  if (known[mime]) return known[mime];
+  const sub = mime.split("/")[1] ?? mime;
+  if (known[sub]) return known[sub];
+  return sub.toUpperCase().slice(0, 6);
+}
+
 interface Props {
   params: Promise<{ workspaceId: string }>;
 }
@@ -58,7 +77,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
     ...recentFiles.map((f) => ({
       type: "file" as const,
       title: f.name,
-      sub: `File · ${f.mime_type?.split("/")[1]?.toUpperCase() ?? "File"}`,
+      sub: `File · ${mimeLabel(f.mime_type)}`,
       time: f.created_at,
       href: `/workspaces/${workspaceId}/files`,
     })),
@@ -182,7 +201,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.sub} · {formatDate(item.time)}</p>
+                      <p className="text-xs text-muted-foreground truncate">{item.sub} · {formatDate(item.time)}</p>
                     </div>
                   </div>
                 </Link>

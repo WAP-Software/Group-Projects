@@ -1,0 +1,2 @@
+-- Add optional start date to tasks for Gantt bar rendering
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS start_date timestamptz;

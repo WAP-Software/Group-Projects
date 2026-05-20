@@ -73,6 +73,7 @@ export interface Task {
   assigned_to: string | null;
   created_by: string | null;
   due_date: string | null;
+  start_date: string | null;
   position: number;
   milestone: boolean;
   depends_on: string | null;

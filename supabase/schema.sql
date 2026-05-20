@@ -81,6 +81,7 @@ create or replace function public.get_my_workspace_ids()
 returns setof uuid language sql security definer set search_path = public stable as $$
   select workspace_id from public.workspace_members where user_id = auth.uid();
 $$;
+grant execute on function public.get_my_workspace_ids() to authenticated, anon;
 
 create policy "workspace_member_select" on public.workspaces for select
   using (id in (select public.get_my_workspace_ids()));

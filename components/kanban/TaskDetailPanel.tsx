@@ -4,7 +4,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadToR2, getFileUrl, deleteFromR2 } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, priorityColor, cn } from "@/lib/utils";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -247,6 +248,8 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-3xl h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <VisuallyHidden><DialogTitle>{task?.title ?? "Task"}</DialogTitle></VisuallyHidden>
+        <VisuallyHidden><DialogDescription>Task details</DialogDescription></VisuallyHidden>
         <div
           className="flex flex-col h-full overflow-hidden relative"
           onDragEnter={onDragEnter}

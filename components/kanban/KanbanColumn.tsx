@@ -6,8 +6,10 @@ import { TaskCard } from "./TaskCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, X } from "lucide-react";
-import type { Task } from "@/types/database";
+import type { Task, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
+
+type Member = { user_id: string; role: string; profile: Profile };
 
 interface Props {
   columnId: "backlog" | "in_progress" | "review" | "done";
@@ -15,14 +17,24 @@ interface Props {
   colorClass: string;
   tasks: Task[];
   workspaceId: string;
+  members: Member[];
+  subtaskCounts: Record<string, { total: number; done: number }>;
+  fileCounts: Record<string, number>;
   onCreateTask: (data: Partial<Task>) => Promise<any>;
-  onUpdateTask: (id: string, data: Partial<Task>) => Promise<any>;
   onDeleteTask: (id: string) => Promise<void>;
+  onOpenDetail: (taskId: string) => void;
 }
 
+const BG: Record<string, string> = {
+  backlog: "var(--kanban-backlog)",
+  in_progress: "var(--kanban-progress)",
+  review: "var(--kanban-review)",
+  done: "var(--kanban-done)",
+};
+
 export function KanbanColumn({
-  columnId, label, colorClass, tasks, workspaceId,
-  onCreateTask, onUpdateTask, onDeleteTask,
+  columnId, label, colorClass, tasks, workspaceId, members,
+  subtaskCounts, fileCounts, onCreateTask, onDeleteTask, onOpenDetail,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -40,25 +52,14 @@ export function KanbanColumn({
     setAdding(false);
   }
 
-  const bgClass: Record<string, string> = {
-    backlog: "var(--kanban-backlog)",
-    in_progress: "var(--kanban-progress)",
-    review: "var(--kanban-review)",
-    done: "var(--kanban-done)",
-  };
-
   return (
-    <div className="w-72 shrink-0 rounded-xl flex flex-col" style={{ backgroundColor: bgClass[columnId] }}>
-      {/* Column header */}
+    <div className="w-72 shrink-0 rounded-xl flex flex-col" style={{ backgroundColor: BG[columnId] }}>
       <div className="flex items-center gap-2 px-3 py-3">
         <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${colorClass}`} />
         <span className="text-sm font-semibold text-foreground">{label}</span>
-        <span className="ml-auto text-xs text-muted-foreground font-medium tabular-nums">
-          {tasks.length}
-        </span>
+        <span className="ml-auto text-xs text-muted-foreground font-medium tabular-nums">{tasks.length}</span>
       </div>
 
-      {/* Drop zone */}
       <Droppable droppableId={columnId}>
         {(provided, snapshot) => (
           <div
@@ -74,8 +75,11 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 index={index}
-                onUpdate={onUpdateTask}
+                members={members}
+                subtaskCount={subtaskCounts[task.id]}
+                fileCount={fileCounts[task.id]}
                 onDelete={onDeleteTask}
+                onOpenDetail={onOpenDetail}
               />
             ))}
             {provided.placeholder}
@@ -83,7 +87,6 @@ export function KanbanColumn({
         )}
       </Droppable>
 
-      {/* Add task */}
       <div className="px-2 pb-2">
         {adding ? (
           <div className="bg-background rounded-lg p-2 border border-border/50 space-y-2">

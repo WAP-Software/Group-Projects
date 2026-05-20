@@ -87,6 +87,31 @@ export interface TaskLabel {
   color: string;
 }
 
+export interface TaskSubtask {
+  id: string;
+  task_id: string;
+  title: string;
+  completed: boolean;
+  assigned_to: string | null;
+  position: number;
+  created_at: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+}
+
+export interface TaskFile {
+  id: string;
+  task_id: string;
+  file_id: string;
+  created_at: string;
+}
+
 export interface FileRecord {
   id: string;
   workspace_id: string;
@@ -250,6 +275,24 @@ export type Database = {
         Row: TaskLabel;
         Insert: Omit<TaskLabel, "id"> & { id?: string };
         Update: Partial<Omit<TaskLabel, "id">>;
+        Relationships: [];
+      };
+      task_subtasks: {
+        Row: TaskSubtask;
+        Insert: Omit<TaskSubtask, "id" | "created_at"> & { id?: string };
+        Update: Partial<Omit<TaskSubtask, "id" | "created_at">>;
+        Relationships: [];
+      };
+      task_comments: {
+        Row: TaskComment;
+        Insert: Omit<TaskComment, "id" | "created_at"> & { id?: string };
+        Update: Partial<Omit<TaskComment, "id" | "created_at">>;
+        Relationships: [];
+      };
+      task_files: {
+        Row: TaskFile;
+        Insert: Omit<TaskFile, "id" | "created_at"> & { id?: string };
+        Update: Partial<Omit<TaskFile, "id" | "created_at">>;
         Relationships: [];
       };
       files: {

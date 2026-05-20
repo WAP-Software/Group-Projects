@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadToR2, getFileUrl, deleteFromR2 } from "@/lib/cloudflare/r2";
-import { formatBytes, formatDate } from "@/lib/utils";
+import { formatBytes, formatDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,14 +17,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Upload, Search, MoreHorizontal, Download, Trash2,
-  FileText, Image, File, FolderOpen,
+  FileText, ImageIcon, File, FolderOpen, CloudUpload,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FileRecord } from "@/types/database";
 
 function fileIcon(mime: string | null) {
-  if (!mime) return <File className="h-4 w-4" />;
-  if (mime.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
+  if (!mime) return <File className="h-4 w-4 text-slate-400" />;
+  if (mime.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />;
   if (mime === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
   return <File className="h-4 w-4 text-slate-400" />;
 }
@@ -40,36 +40,31 @@ export function FileVault({ workspaceId }: Props) {
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [folder, setFolder] = useState("/");
+  const [dragging, setDragging] = useState(false);
+  const dragCounter = useRef(0);
 
-  useEffect(() => { loadFiles(); }, [workspaceId, folder]);
-
-  async function loadFiles() {
+  const loadFiles = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("files")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("folder_path", folder)
       .order("created_at", { ascending: false });
     setFiles(data ?? []);
     setLoading(false);
-  }
+  }, [workspaceId]);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => { loadFiles(); }, [loadFiles]);
 
+  async function doUpload(file: File) {
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (!user || authErr) { toast.error("Not authenticated"); return; }
-
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) { toast.error("No auth token"); return; }
 
     setUploading(true);
     setUploadProgress(10);
-
     try {
       const { key } = await uploadToR2(file, workspaceId, user.id, token);
       setUploadProgress(80);
@@ -80,19 +75,43 @@ export function FileVault({ workspaceId }: Props) {
         mime_type: file.type,
         size_bytes: file.size,
         r2_key: key,
-        folder_path: folder,
+        folder_path: "/",
         uploaded_by: user.id,
       });
       setUploadProgress(100);
       toast.success("File uploaded!");
       loadFiles();
-    } catch (err) {
+    } catch {
       toast.error("Upload failed");
     } finally {
       setUploading(false);
       setUploadProgress(0);
-      e.target.value = "";
     }
+  }
+
+  async function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) await doUpload(file);
+    e.target.value = "";
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current++;
+    setDragging(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setDragging(false);
+  }
+  function onDragOver(e: React.DragEvent) { e.preventDefault(); }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) await doUpload(file);
   }
 
   async function handleDownload(file: FileRecord) {
@@ -106,30 +125,40 @@ export function FileVault({ workspaceId }: Props) {
   async function handleDelete(file: FileRecord) {
     if (!confirm(`Delete "${file.name}"?`)) return;
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      await deleteFromR2(file.r2_key, session.access_token).catch(() => {});
-    }
+    if (session?.access_token) await deleteFromR2(file.r2_key, session.access_token).catch(() => {});
     await supabase.from("files").delete().eq("id", file.id);
     toast.success("File deleted");
     loadFiles();
   }
 
-  const filtered = files.filter((f) =>
-    !search || f.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = files.filter((f) => !search || f.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="p-6 max-w-7xl mx-auto w-full">
+    <div
+      className="p-6 max-w-7xl mx-auto w-full relative"
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
+      {/* Drag overlay */}
+      {dragging && (
+        <div className="absolute inset-4 z-50 flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-primary/5 pointer-events-none">
+          <CloudUpload className="h-10 w-10 text-primary" />
+          <p className="text-primary font-semibold text-lg">Drop file to upload</p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">File Vault</h1>
-          <p className="text-sm text-muted-foreground mt-1">Upload and manage shared files</p>
+          <p className="text-sm text-muted-foreground mt-1">Upload and manage shared files — drag & drop anywhere</p>
         </div>
         <label className="cursor-pointer">
           <Button asChild className="gap-2 pressable">
             <span><Upload className="h-4 w-4" /> Upload File</span>
           </Button>
-          <input type="file" className="sr-only" onChange={handleUpload} disabled={uploading} />
+          <input type="file" className="sr-only" onChange={handleFileInput} disabled={uploading} />
         </label>
       </div>
 
@@ -158,9 +187,14 @@ export function FileVault({ workspaceId }: Props) {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center py-20 text-center fade-in stagger-3">
-          <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="font-semibold mb-2">No files yet</h3>
-          <p className="text-sm text-muted-foreground">Upload your first file to get started.</p>
+          <label className="cursor-pointer flex flex-col items-center">
+            <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4 hover:bg-muted/70 transition-colors">
+              <FolderOpen className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2">No files yet</h3>
+            <p className="text-sm text-muted-foreground mb-4">Drag & drop files here or click to upload</p>
+            <input type="file" className="sr-only" onChange={handleFileInput} disabled={uploading} />
+          </label>
         </div>
       ) : (
         <div className="rounded-xl border border-border overflow-hidden fade-in stagger-3">
@@ -168,9 +202,9 @@ export function FileVault({ workspaceId }: Props) {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Uploaded</TableHead>
+                <TableHead className="hidden sm:table-cell">Type</TableHead>
+                <TableHead className="hidden sm:table-cell">Size</TableHead>
+                <TableHead className="hidden md:table-cell">Uploaded</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -180,15 +214,13 @@ export function FileVault({ workspaceId }: Props) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {fileIcon(file.mime_type)}
-                      <span className="text-sm font-medium">{file.name}</span>
-                      {file.version > 1 && (
-                        <Badge variant="secondary" className="text-xs">v{file.version}</Badge>
-                      )}
+                      <span className="text-sm font-medium truncate max-w-[180px]">{file.name}</span>
+                      {file.version > 1 && <Badge variant="secondary" className="text-xs">v{file.version}</Badge>}
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{file.mime_type ?? "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{file.size_bytes ? formatBytes(file.size_bytes) : "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{formatDate(file.created_at)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">{file.mime_type ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">{file.size_bytes ? formatBytes(file.size_bytes) : "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground hidden md:table-cell">{formatDate(file.created_at)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -200,10 +232,7 @@ export function FileVault({ workspaceId }: Props) {
                         <DropdownMenuItem onClick={() => handleDownload(file)}>
                           <Download className="h-3.5 w-3.5 mr-2" /> Download
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => handleDelete(file)}
-                        >
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(file)}>
                           <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

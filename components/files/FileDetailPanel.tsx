@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getFileUrl, downloadFile, uploadToR2, deleteFromR2 } from "@/lib/cloudflare/r2";
-import { formatDate, formatBytes, getInitials, cn } from "@/lib/utils";
+import { formatDate, formatBytes, getInitials, cn, mimeLabel } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,10 +38,10 @@ type FileComment = {
 type LinkedTask = Task & { subtask_count?: number };
 
 const REVIEW_STATUS_COLOR: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-600",
-  in_review: "bg-blue-100 text-blue-700",
-  changes_requested: "bg-yellow-100 text-yellow-700",
-  approved: "bg-green-100 text-green-700",
+  pending: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  in_review: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
+  changes_requested: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300",
+  approved: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
 };
 
 const REVIEW_STATUS_LABEL: Record<string, string> = {
@@ -290,7 +290,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                 <h2 className="font-semibold text-base leading-snug break-all">{file.name}</h2>
                 <div className="flex flex-wrap gap-2 mt-1.5">
                   {file.mime_type && !file.external_url && (
-                    <Badge variant="secondary" className="text-xs">{file.mime_type.split("/")[1]?.toUpperCase() ?? file.mime_type}</Badge>
+                    <Badge variant="secondary" className="text-xs">{mimeLabel(file.mime_type)}</Badge>
                   )}
                   {file.external_url && <Badge variant="secondary" className="text-xs">External link</Badge>}
                   {file.size_bytes ? <span className="text-xs text-muted-foreground">{formatBytes(file.size_bytes)}</span> : null}

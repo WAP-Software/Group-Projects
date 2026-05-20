@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, getInitials, priorityColor, formatBytes } from "@/lib/utils";
+import { formatDate, getInitials, priorityColor, formatBytes, mimeLabel } from "@/lib/utils";
 import type { Workspace, Task, FileRecord, WorkspaceMember, Profile } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,24 +11,6 @@ import {
   Calendar, FolderOpen, Zap, File,
 } from "lucide-react";
 
-function mimeLabel(mime: string | null): string {
-  if (!mime) return "File";
-  const known: Record<string, string> = {
-    "text/uri-list": "Link",
-    "application/pdf": "PDF",
-    "text/plain": "TXT",
-    "text/csv": "CSV",
-    "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
-    "vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
-    "vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
-    "vnd.ms-excel": "XLS",
-    "vnd.ms-powerpoint": "PPT",
-  };
-  if (known[mime]) return known[mime];
-  const sub = mime.split("/")[1] ?? mime;
-  if (known[sub]) return known[sub];
-  return sub.toUpperCase().slice(0, 6);
-}
 
 interface Props {
   params: Promise<{ workspaceId: string }>;

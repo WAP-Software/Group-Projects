@@ -75,6 +75,29 @@ export function priorityColor(priority: string): string {
   return map[priority] ?? map.medium;
 }
 
+export function mimeLabel(mime: string | null): string {
+  if (!mime) return "File";
+  const known: Record<string, string> = {
+    "text/uri-list": "Link",
+    "application/pdf": "PDF",
+    "text/plain": "TXT",
+    "text/csv": "CSV",
+    "application/json": "JSON",
+    "application/zip": "ZIP",
+    "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+    "vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+    "vnd.ms-excel": "XLS",
+    "vnd.ms-powerpoint": "PPT",
+  };
+  if (known[mime]) return known[mime];
+  const sub = mime.split("/")[1] ?? mime;
+  if (known[sub]) return known[sub];
+  const type = mime.split("/")[0];
+  if (type === "image") return sub.toUpperCase().slice(0, 5);
+  return sub.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "File";
+}
+
 export function statusColor(status: string): string {
   const map: Record<string, string> = {
     backlog: "text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",

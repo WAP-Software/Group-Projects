@@ -83,7 +83,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
           </div>
         </div>
         {(ws?.course_name || ws?.semester) && (
-          <div className="flex gap-2 mt-2 ml-13">
+          <div className="flex gap-2 mt-2 ml-[52px]">
             {ws.course_name && <Badge variant="secondary">{ws.course_name}</Badge>}
             {ws.semester && <Badge variant="outline">{ws.semester}</Badge>}
           </div>

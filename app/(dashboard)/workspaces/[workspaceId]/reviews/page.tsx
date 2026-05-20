@@ -9,10 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { ClipboardCheck, Plus, Star, FileText } from "lucide-react";
+import { ClipboardCheck, Plus, Star, FileText, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Review, FileRecord } from "@/types/database";
 
@@ -30,6 +30,7 @@ interface Props {
 interface FeedbackRow {
   id: string;
   reviewer_id: string;
+  reviewer_name?: string;
   feedback: string | null;
   rating: number | null;
   status: string;
@@ -48,13 +49,24 @@ export default function ReviewsPage({ params }: Props) {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [feedbackDialog, setFeedbackDialog] = useState<string | null>(null);
   const [form, setForm] = useState({ title: "", file_id: "", due_date: "" });
-  const [feedback, setFeedback] = useState({ text: "", rating: "4" });
+
+  // Feedback flow state
+  const [feedbackDialog, setFeedbackDialog] = useState<string | null>(null);
+  const [feedbackForm, setFeedbackForm] = useState({ text: "", rating: "4", reviewerName: "" });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const [userId, setUserId] = useState("");
+  const [userProfile, setUserProfile] = useState<{ full_name?: string; email?: string } | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => { if (user) setUserId(user.id); });
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        setUserId(user.id);
+        const { data: profile } = await supabase.from("profiles").select("full_name, email").eq("id", user.id).single();
+        setUserProfile(profile);
+      }
+    });
     loadData();
     const sub = supabase
       .channel(`reviews:${workspaceId}`)
@@ -97,20 +109,33 @@ export default function ReviewsPage({ params }: Props) {
     loadData();
   }
 
-  async function handleFeedback(reviewId: string) {
+  function openFeedbackDialog(reviewId: string) {
+    setFeedbackForm({ text: "", rating: "4", reviewerName: "" });
+    setFeedbackDialog(reviewId);
+  }
+
+  function requestConfirm() {
+    if (!feedbackForm.reviewerName.trim()) { toast.error("Please enter your name to sign off"); return; }
+    if (!feedbackForm.text.trim()) { toast.error("Please write your feedback"); return; }
+    setConfirmOpen(true);
+  }
+
+  async function submitFeedback() {
+    if (!feedbackDialog) return;
     const { error } = await supabase.from("review_assignments").upsert({
-      review_id: reviewId,
+      review_id: feedbackDialog,
       reviewer_id: userId,
-      feedback: feedback.text,
-      rating: parseInt(feedback.rating),
+      feedback: feedbackForm.text,
+      rating: parseInt(feedbackForm.rating),
       status: "done",
       submitted_at: new Date().toISOString(),
     });
     if (error) { toast.error("Failed to submit feedback"); return; }
-    await supabase.from("reviews").update({ status: "approved" }).eq("id", reviewId);
-    toast.success("Feedback submitted!");
+    await supabase.from("reviews").update({ status: "approved" }).eq("id", feedbackDialog);
+    toast.success(`Feedback submitted — signed as ${feedbackForm.reviewerName}`);
+    setConfirmOpen(false);
     setFeedbackDialog(null);
-    setFeedback({ text: "", rating: "4" });
+    setFeedbackForm({ text: "", rating: "4", reviewerName: "" });
     loadData();
   }
 
@@ -124,14 +149,16 @@ export default function ReviewsPage({ params }: Props) {
     );
   }
 
+  const canSubmit = feedbackForm.reviewerName.trim().length > 0 && feedbackForm.text.trim().length > 0;
+
   return (
-    <div className="p-6 max-w-7xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-6 fade-in stagger-1">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">Peer Review</h1>
           <p className="text-sm text-muted-foreground mt-1">Submit files for peer review and feedback</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
+        <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable self-start sm:self-auto">
           <Plus className="h-4 w-4" /> Submit for Review
         </Button>
       </div>
@@ -150,37 +177,38 @@ export default function ReviewsPage({ params }: Props) {
         <div className="space-y-4 fade-in stagger-2">
           {reviews.map((review) => {
             const feedbackRows = (review.assignments ?? []).filter((a) => a.feedback);
+            const canGiveFeedback = review.submitted_by !== userId && review.status !== "approved";
             return (
               <Card key={review.id} className="border-border/50">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="text-base">{review.title}</CardTitle>
+                    <div className="min-w-0">
+                      <CardTitle className="text-base truncate">{review.title}</CardTitle>
                       {review.file && (
                         <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                          <FileText className="h-3 w-3" /> {review.file.name}
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{review.file.name}</span>
                         </p>
                       )}
                     </div>
-                    <Badge className={`text-xs capitalize ${STATUS_COLORS[review.status]}`}>
+                    <Badge className={`text-xs capitalize shrink-0 ${STATUS_COLORS[review.status]}`}>
                       {review.status.replace("_", " ")}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="text-xs text-muted-foreground">
                       Submitted {formatDate(review.created_at)}
                       {review.due_date && ` · Due ${formatDate(review.due_date)}`}
                     </div>
-                    {review.submitted_by !== userId && review.status !== "approved" && (
-                      <Button size="sm" variant="outline" className="pressable" onClick={() => setFeedbackDialog(review.id)}>
-                        <Star className="h-3.5 w-3.5 mr-1" /> Give Feedback
+                    {canGiveFeedback && (
+                      <Button size="sm" variant="outline" className="pressable self-start sm:self-auto" onClick={() => openFeedbackDialog(review.id)}>
+                        <Star className="h-3.5 w-3.5 mr-1.5" /> Give Feedback
                       </Button>
                     )}
                   </div>
 
-                  {/* Submitted feedback */}
                   {feedbackRows.length > 0 && (
                     <div className="pt-3 border-t border-border/50 space-y-3">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -188,7 +216,7 @@ export default function ReviewsPage({ params }: Props) {
                       </p>
                       {feedbackRows.map((a) => (
                         <div key={a.id} className="space-y-1 p-3 rounded-lg bg-muted/40">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {renderStars(a.rating)}
                             <span className="text-xs text-muted-foreground">({a.rating}/5)</span>
                             {a.submitted_at && (
@@ -209,10 +237,13 @@ export default function ReviewsPage({ params }: Props) {
         </div>
       )}
 
-      {/* Submit dialog */}
+      {/* Submit for review dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Submit for Review</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Submit for Review</DialogTitle>
+            <DialogDescription>Create a peer review request for your team.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Review title *</Label>
@@ -242,14 +273,17 @@ export default function ReviewsPage({ params }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Feedback dialog */}
-      <Dialog open={!!feedbackDialog} onOpenChange={() => setFeedbackDialog(null)}>
+      {/* Feedback dialog — step 1: fill in feedback + sign with name */}
+      <Dialog open={!!feedbackDialog && !confirmOpen} onOpenChange={(v) => { if (!v) setFeedbackDialog(null); }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Submit Feedback</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Submit Feedback</DialogTitle>
+            <DialogDescription>Rate the work and sign off with your name.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Rating (1–5)</Label>
-              <Select value={feedback.rating} onValueChange={(v) => setFeedback({ ...feedback, rating: v })}>
+              <Select value={feedbackForm.rating} onValueChange={(v) => setFeedbackForm({ ...feedbackForm, rating: v })}>
                 <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[1, 2, 3, 4, 5].map((r) => (
@@ -259,12 +293,61 @@ export default function ReviewsPage({ params }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Feedback</Label>
-              <Textarea value={feedback.text} onChange={(e) => setFeedback({ ...feedback, text: e.target.value })} placeholder="Your detailed feedback…" rows={4} />
+              <Label>Feedback *</Label>
+              <Textarea
+                value={feedbackForm.text}
+                onChange={(e) => setFeedbackForm({ ...feedbackForm, text: e.target.value })}
+                placeholder="Your detailed feedback…"
+                rows={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Your name (sign off) *</Label>
+              <Input
+                value={feedbackForm.reviewerName}
+                onChange={(e) => setFeedbackForm({ ...feedbackForm, reviewerName: e.target.value })}
+                placeholder={userProfile?.full_name ?? userProfile?.email ?? "Enter your full name"}
+                className="h-10"
+              />
+              <p className="text-xs text-muted-foreground">Your name will be attached to this review as your signature.</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setFeedbackDialog(null)}>Cancel</Button>
-              <Button onClick={() => feedbackDialog && handleFeedback(feedbackDialog)} className="pressable">Submit</Button>
+              <Button onClick={requestConfirm} disabled={!canSubmit} className="pressable">
+                Review →
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm dialog — step 2: final sign-off confirmation */}
+      <Dialog open={confirmOpen} onOpenChange={(v) => { if (!v) setConfirmOpen(false); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirm your review</DialogTitle>
+            <DialogDescription>This action is final and cannot be changed afterwards.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                <span className="text-sm font-medium">Signed as: {feedbackForm.reviewerName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-amber-500 shrink-0" />
+                <span className="text-sm">Rating: {feedbackForm.rating}/5</span>
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-3 mt-1">{feedbackForm.text}</p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              By confirming, you permanently submit this feedback under your name.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmOpen(false)}>Back</Button>
+              <Button onClick={submitFeedback} className="pressable gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Confirm & Submit
+              </Button>
             </div>
           </div>
         </DialogContent>

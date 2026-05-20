@@ -36,9 +36,9 @@ export function getFileUrl(r2Key: string): string {
   return `${CF_WORKER_URL}/files/${encodeURIComponent(r2Key)}`;
 }
 
-export async function downloadFile(r2Key: string, filename: string): Promise<void> {
+export async function downloadFile(r2Key: string, filename: string, token?: string): Promise<void> {
   const url = getFileUrl(r2Key);
-  const res = await fetch(url);
+  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);

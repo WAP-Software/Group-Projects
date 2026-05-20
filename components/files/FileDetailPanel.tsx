@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getFileUrl, downloadFile, uploadToR2, deleteFromR2 } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, cn } from "@/lib/utils";
@@ -15,9 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Download, X, Send, ExternalLink, File, FileText,
+  Download, X, Send, File, FileText,
   ImageIcon, Table2, Presentation, Kanban, Calendar, Flag,
-  Eye, Pin, PinOff, Tag, Plus, Link2, Upload,
+  Eye, Tag, Plus, Link2, Upload,
   ClipboardCheck, History, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -81,6 +82,7 @@ interface Props {
 
 export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }: Props) {
   const supabase = createClient();
+  const router = useRouter();
   const [comments, setComments] = useState<FileComment[]>([]);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [versions, setVersions] = useState<FileRecord[]>([]);
@@ -113,7 +115,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   const load = useCallback(async () => {
     if (!file) return;
     setLoading(true);
-    const [commentsRes, tasksRes, versionsRes] = await Promise.all([
+    const [commentsRes, tasksRes, versionsRes, reviewsRes] = await Promise.all([
       supabase
         .from("file_comments")
         .select("*, profile:profiles(id, full_name, avatar_url, email)")
@@ -129,10 +131,17 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
         .eq("workspace_id", workspaceId)
         .eq("original_name", file.original_name)
         .order("version", { ascending: false }),
+      supabase
+        .from("reviews")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .or(`document_id.eq.${file.id},file_id.eq.${file.id}`)
+        .order("created_at", { ascending: false }),
     ]);
     setComments((commentsRes.data ?? []) as any);
     setLinkedTasks(((tasksRes.data ?? []).map((r: any) => r.task).filter(Boolean)) as LinkedTask[]);
     setVersions((versionsRes.data ?? []) as FileRecord[]);
+    setLinkedReviews((reviewsRes.data ?? []) as Review[]);
 
     // Load CSV if applicable
     const previewType = canPreview(file.mime_type);
@@ -234,6 +243,11 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
     }
   }
 
+  async function handleDownload(r2Key: string, filename: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+    await downloadFile(r2Key, filename, session?.access_token).catch(() => toast.error("Download failed"));
+  }
+
   async function startReview() {
     if (!file) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -247,7 +261,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
     }).select().single();
     if (error) { toast.error("Review could not be created"); return; }
     toast.success("Peer review started!");
-    setLinkedReviews((r) => [...r, data as Review]);
+    load();
   }
 
   if (!file) return null;
@@ -301,7 +315,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                 )}
                 {!file.external_url && (
                   <button
-                    onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download failed"))}
+                    onClick={() => handleDownload(file.r2_key, file.original_name)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
                     aria-label="Download"
                   >
@@ -393,7 +407,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                           </Avatar>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline gap-2">
-                              <span className="text-sm font-medium">{p?.full_name ?? p?.email ?? "Unbekannt"}</span>
+                              <span className="text-sm font-medium">{p?.full_name ?? p?.email ?? "Unknown"}</span>
                               <span className="text-xs text-muted-foreground">{formatDate(cm.created_at)}</span>
                             </div>
                             <p className="text-sm text-foreground/90 mt-0.5 whitespace-pre-wrap">{renderCommentContent(cm.content, members)}</p>
@@ -460,7 +474,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   </div>
                 ) : (
                   linkedTasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors">
+                    <div key={task.id} onClick={() => { onClose(); router.push(`/workspaces/${workspaceId}/tasks`); }} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors cursor-pointer">
                       <div className={cn("mt-0.5 h-2 w-2 rounded-full shrink-0", {
                         "bg-slate-400": task.status === "backlog",
                         "bg-blue-500": task.status === "in_progress",
@@ -532,7 +546,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                       {v.id === file.id && <Badge className="text-xs shrink-0">Current</Badge>}
                       {v.r2_key && (
                         <button
-                          onClick={() => downloadFile(v.r2_key, v.original_name).catch(() => toast.error("Download failed"))}
+                          onClick={() => handleDownload(v.r2_key, v.original_name)}
                           className="shrink-0 flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -597,7 +611,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {fileUrl && previewType !== "none" && (
-                <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => {})}>
+                <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleDownload(file.r2_key, file.original_name)}>
                   <Download className="h-3.5 w-3.5" /> Download
                 </Button>
               )}

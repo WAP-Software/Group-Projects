@@ -164,7 +164,8 @@ export function FileVault({ workspaceId }: Props) {
       return;
     }
     try {
-      await downloadFile(file.r2_key, file.original_name);
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadFile(file.r2_key, file.original_name, session?.access_token);
     } catch {
       toast.error("Download failed");
     }
@@ -231,12 +232,14 @@ export function FileVault({ workspaceId }: Props) {
     setZipping(true);
     try {
       const zip = new JSZip();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       await Promise.all(
         targets
           .filter((f) => f.r2_key && !f.external_url)
           .map(async (f) => {
             const url = `${process.env.NEXT_PUBLIC_CF_WORKER_URL}/files/${encodeURIComponent(f.r2_key)}`;
-            const res = await fetch(url);
+            const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
             if (res.ok) zip.file(f.name, await res.blob());
           })
       );
@@ -298,12 +301,12 @@ export function FileVault({ workspaceId }: Props) {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 fade-in stagger-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">Files</h1>
           <p className="text-sm text-muted-foreground mt-1">Click a file for details — drag & drop to upload</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setExternalLinkOpen(true)}>
             <Link2 className="h-4 w-4" /> Link
           </Button>
@@ -327,18 +330,18 @@ export function FileVault({ workspaceId }: Props) {
       )}
 
       {/* Folder breadcrumb */}
-      <div className="flex items-center gap-1 mb-3 text-sm fade-in stagger-1">
+      <div className="flex items-center gap-1 mb-3 text-sm fade-in stagger-1 overflow-x-auto pb-0.5">
         <button
           onClick={() => setCurrentFolder("/")}
-          className={cn("flex items-center gap-1 px-2 py-1 rounded-md transition-colors hover:bg-muted", currentFolder === "/" && "bg-primary/10 text-primary")}
+          className={cn("flex items-center gap-1 px-2 py-1 rounded-md transition-colors hover:bg-muted shrink-0", currentFolder === "/" && "bg-primary/10 text-primary")}
         >
-          <Home className="h-3.5 w-3.5" /> Alle
+          <Home className="h-3.5 w-3.5" /> All
         </button>
         {FOLDERS.filter((f) => f !== "/").map((folder) => (
           <button
             key={folder}
             onClick={() => setCurrentFolder(folder)}
-            className={cn("flex items-center gap-1 px-2 py-1 rounded-md transition-colors hover:bg-muted text-muted-foreground", currentFolder === folder && "bg-primary/10 text-primary font-medium")}
+            className={cn("flex items-center gap-1 px-2 py-1 rounded-md transition-colors hover:bg-muted text-muted-foreground shrink-0", currentFolder === folder && "bg-primary/10 text-primary font-medium")}
           >
             <ChevronRight className="h-3 w-3" />
             {folder.replace("/", "")}

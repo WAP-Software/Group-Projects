@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getFileUrl, downloadFile, uploadToR2, deleteFromR2 } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, cn } from "@/lib/utils";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -67,7 +66,8 @@ function canPreview(mime: string | null): "image" | "pdf" | "csv" | "none" {
   if (!mime) return "none";
   if (mime.startsWith("image/")) return "image";
   if (mime === "application/pdf") return "pdf";
-  if (mime.includes("csv") || mime.includes("spreadsheet") || mime === "text/csv") return "csv";
+  // only plain-text CSV — binary spreadsheets (xlsx, xls, ods) cannot be parsed
+  if (mime === "text/csv" || mime === "text/plain" || mime === "application/csv") return "csv";
   return "none";
 }
 
@@ -264,8 +264,10 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
 
   return (
     <>
-      <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col gap-0">
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-w-2xl w-full h-[85vh] max-h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+          <VisuallyHidden><DialogTitle>{file.name}</DialogTitle></VisuallyHidden>
+          <VisuallyHidden><DialogDescription>File details</DialogDescription></VisuallyHidden>
           {/* Header */}
           <div className="p-5 border-b border-border space-y-3">
             <div className="flex items-start gap-3">
@@ -527,7 +529,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                         <p className="text-sm font-medium truncate">{v.name}</p>
                         <p className="text-xs text-muted-foreground">{formatDate(v.created_at)} {v.size_bytes ? `· ${formatBytes(v.size_bytes)}` : ""}</p>
                       </div>
-                      {v.id === file.id && <Badge className="text-xs shrink-0">Aktuell</Badge>}
+                      {v.id === file.id && <Badge className="text-xs shrink-0">Current</Badge>}
                       {v.r2_key && (
                         <button
                           onClick={() => downloadFile(v.r2_key, v.original_name).catch(() => toast.error("Download failed"))}
@@ -576,8 +578,8 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
               </div>
             </TabsContent>
           </Tabs>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Lightbox preview */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>

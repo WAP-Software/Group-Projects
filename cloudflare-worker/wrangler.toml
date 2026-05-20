@@ -7,7 +7,7 @@ binding = "R2_BUCKET"
 bucket_name = "finance-collab-files"
 
 [vars]
-ALLOWED_ORIGIN = "https://your-app.vercel.app"
+ALLOWED_ORIGIN = "https://finance-collab.vercel.app"
 
 # Secrets (set via: npx wrangler secret put <NAME>)
 # SUPABASE_JWT_SECRET

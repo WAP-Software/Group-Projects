@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, getInitials, priorityColor } from "@/lib/utils";
-import type { Workspace, Task, Document, WorkspaceMember, Profile } from "@/types/database";
+import { formatDate, getInitials, priorityColor, formatBytes } from "@/lib/utils";
+import type { Workspace, Task, FileRecord, WorkspaceMember, Profile } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
   FileText, Kanban, Users, CheckCircle2, Clock, AlertCircle,
-  Calendar, TrendingUp, Zap,
+  Calendar, FolderOpen, Zap, File,
 } from "lucide-react";
 
 interface Props {
@@ -19,17 +19,17 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
   const { workspaceId } = await params;
   const supabase = await createClient();
 
-  const [wsResult, membersResult, allTasksResult, docsResult] = await Promise.all([
+  const [wsResult, membersResult, allTasksResult, filesResult] = await Promise.all([
     supabase.from("workspaces").select("*").eq("id", workspaceId).single(),
     supabase.from("workspace_members").select("*, profile:profiles(*)").eq("workspace_id", workspaceId),
     supabase.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
-    supabase.from("documents").select("*").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(4),
+    supabase.from("files").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(6),
   ]);
 
   const ws = wsResult.data as Workspace | null;
   const members = (membersResult.data ?? []) as Array<WorkspaceMember & { profile: Profile }>;
   const allTasks = (allTasksResult.data ?? []) as Task[];
-  const recentDocs = docsResult.data ?? [];
+  const recentFiles = (filesResult.data ?? []) as FileRecord[];
 
   const today = new Date();
   const in14Days = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
@@ -44,8 +44,8 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
   const totalTasks = allTasks.length;
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
-  // Activity feed: merge recent tasks + docs
-  const activityItems: Array<{ type: "task" | "doc"; title: string; sub: string; time: string; href: string }> = [
+  // Activity feed: merge recent tasks + files
+  const activityItems: Array<{ type: "task" | "file"; title: string; sub: string; time: string; href: string }> = [
     ...allTasks.slice(0, 6).map((t) => ({
       type: "task" as const,
       title: t.title,
@@ -53,12 +53,12 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
       time: t.updated_at,
       href: `/workspaces/${workspaceId}/tasks`,
     })),
-    ...recentDocs.map((d: any) => ({
-      type: "doc" as const,
-      title: d.title,
-      sub: `Document · ${d.status}`,
-      time: d.updated_at,
-      href: `/workspaces/${workspaceId}/documents/${d.id}`,
+    ...recentFiles.map((f) => ({
+      type: "file" as const,
+      title: f.name,
+      sub: `File · ${f.mime_type?.split("/")[1]?.toUpperCase() ?? "File"}`,
+      time: f.created_at,
+      href: `/workspaces/${workspaceId}/files`,
     })),
   ]
     .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -103,7 +103,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
           {[
             { label: "Members", value: members.length, icon: Users, color: "text-blue-500" },
             { label: "Open Tasks", value: allTasks.filter((t) => t.status !== "done").length, icon: Kanban, color: "text-violet-500" },
-            { label: "Documents", value: recentDocs.length, icon: FileText, color: "text-amber-500" },
+            { label: "Files", value: recentFiles.length, icon: FolderOpen, color: "text-amber-500" },
             { label: "Completed", value: doneTasks, icon: CheckCircle2, color: "text-green-500" },
           ].map(({ label, value, icon: Icon, color }) => (
             <Card key={label} className="border-border/50">
@@ -176,7 +176,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
                 <Link key={i} href={item.href}>
                   <div className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className={`mt-0.5 h-5 w-5 rounded-md flex items-center justify-center shrink-0 ${item.type === "task" ? "bg-violet-100 text-violet-600" : "bg-amber-100 text-amber-600"}`}>
-                      {item.type === "task" ? <Kanban className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                      {item.type === "task" ? <Kanban className="h-3 w-3" /> : <File className="h-3 w-3" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.title}</p>
@@ -228,29 +228,32 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
         </Card>
       </div>
 
-      {/* Recent Documents */}
-      {recentDocs.length > 0 && (
+      {/* Recent Files */}
+      {recentFiles.length > 0 && (
         <Card className="border-border/50 fade-in stagger-5">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-amber-500" />
-                Recent Documents
+                <FolderOpen className="h-4 w-4 text-amber-500" />
+                Recent Files
               </CardTitle>
-              <Link href={`/workspaces/${workspaceId}/documents`} className="text-xs text-primary hover:underline">
-                All documents →
+              <Link href={`/workspaces/${workspaceId}/files`} className="text-xs text-primary hover:underline">
+                All files →
               </Link>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {recentDocs.map((doc: any) => (
-                <Link key={doc.id} href={`/workspaces/${workspaceId}/documents/${doc.id}`}>
-                  <div className="p-3 rounded-lg border border-border/50 hover:bg-muted/50 hover:border-primary/30 transition-all pressable">
-                    <FileText className="h-5 w-5 text-muted-foreground mb-2" />
-                    <p className="text-sm font-medium truncate">{doc.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{formatDate(doc.updated_at)}</p>
-                    <Badge variant="outline" className="text-xs mt-2 capitalize">{doc.status}</Badge>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {recentFiles.map((f) => (
+                <Link key={f.id} href={`/workspaces/${workspaceId}/files`}>
+                  <div className="p-3 rounded-lg border border-border/50 hover:bg-muted/50 hover:border-primary/30 transition-all pressable flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <File className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{f.size_bytes ? formatBytes(f.size_bytes) : ""} · {formatDate(f.created_at)}</p>
+                    </div>
                   </div>
                 </Link>
               ))}

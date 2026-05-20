@@ -17,10 +17,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Upload, Search, MoreHorizontal, Download, Trash2,
-  FileText, ImageIcon, File, FolderOpen, CloudUpload,
+  FileText, ImageIcon, File, FolderOpen, CloudUpload, MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FileRecord } from "@/types/database";
+import { FileDetailPanel } from "./FileDetailPanel";
 
 function fileIcon(mime: string | null) {
   if (!mime) return <File className="h-4 w-4 text-slate-400" />;
@@ -41,6 +42,7 @@ export function FileVault({ workspaceId }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const dragCounter = useRef(0);
 
   const loadFiles = useCallback(async () => {
@@ -151,8 +153,8 @@ export function FileVault({ workspaceId }: Props) {
 
       <div className="flex items-center justify-between mb-6 fade-in stagger-1">
         <div>
-          <h1 className="text-2xl font-bold">File Vault</h1>
-          <p className="text-sm text-muted-foreground mt-1">Upload and manage shared files — drag & drop anywhere</p>
+          <h1 className="text-2xl font-bold">Files</h1>
+          <p className="text-sm text-muted-foreground mt-1">Click a file to comment and view linked tasks — drag & drop to upload</p>
         </div>
         <label className="cursor-pointer">
           <Button asChild className="gap-2 pressable">
@@ -210,7 +212,11 @@ export function FileVault({ workspaceId }: Props) {
             </TableHeader>
             <TableBody>
               {filtered.map((file) => (
-                <TableRow key={file.id} className="hover:bg-muted/30 transition-colors">
+                <TableRow
+                  key={file.id}
+                  className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => setSelectedFile(file)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {fileIcon(file.mime_type)}
@@ -221,7 +227,7 @@ export function FileVault({ workspaceId }: Props) {
                   <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">{file.mime_type ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground hidden sm:table-cell">{file.size_bytes ? formatBytes(file.size_bytes) : "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground hidden md:table-cell">{formatDate(file.created_at)}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8 pressable">
@@ -229,6 +235,9 @@ export function FileVault({ workspaceId }: Props) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setSelectedFile(file)}>
+                          <MessageSquare className="h-3.5 w-3.5 mr-2" /> Open
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDownload(file)}>
                           <Download className="h-3.5 w-3.5 mr-2" /> Download
                         </DropdownMenuItem>
@@ -244,6 +253,13 @@ export function FileVault({ workspaceId }: Props) {
           </Table>
         </div>
       )}
+
+      <FileDetailPanel
+        file={selectedFile}
+        workspaceId={workspaceId}
+        open={selectedFile !== null}
+        onClose={() => setSelectedFile(null)}
+      />
     </div>
   );
 }

@@ -26,7 +26,6 @@ import {
   Moon,
   Sun,
   LayoutDashboard,
-  FileText,
   Kanban,
   GanttChartSquare,
   FolderOpen,
@@ -42,10 +41,9 @@ import type { Profile } from "@/types/database";
 
 const WORKSPACE_NAV = [
   { href: "", label: "Overview", icon: LayoutDashboard },
-  { href: "/documents", label: "Documents", icon: FileText },
+  { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/tasks", label: "Kanban Board", icon: Kanban },
   { href: "/timeline", label: "Timeline", icon: GanttChartSquare },
-  { href: "/files", label: "File Vault", icon: FolderOpen },
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/sources", label: "Sources", icon: BookOpen },
   { href: "/formulas", label: "Formulas", icon: Calculator },

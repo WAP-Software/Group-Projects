@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
-  FileText,
   Kanban,
   GanttChartSquare,
   FolderOpen,
@@ -33,10 +32,9 @@ import { Separator } from "@/components/ui/separator";
 
 const WORKSPACE_LINKS = [
   { href: "", label: "Overview", icon: LayoutDashboard },
-  { href: "/documents", label: "Documents", icon: FileText },
+  { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/tasks", label: "Kanban Board", icon: Kanban },
   { href: "/timeline", label: "Timeline", icon: GanttChartSquare },
-  { href: "/files", label: "File Vault", icon: FolderOpen },
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/sources", label: "Sources", icon: BookOpen },
   { href: "/formulas", label: "Formulas", icon: Calculator },

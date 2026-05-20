@@ -12,9 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { ClipboardCheck, Plus, Star } from "lucide-react";
+import { ClipboardCheck, Plus, Star, FileText } from "lucide-react";
 import { toast } from "sonner";
-import type { Review, Document } from "@/types/database";
+import type { Review, FileRecord } from "@/types/database";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-slate-100 text-slate-700 dark:bg-slate-800",
@@ -27,19 +27,19 @@ interface Props {
   params: Promise<{ workspaceId: string }>;
 }
 
-interface ReviewWithDoc extends Review {
-  document?: { title: string };
+interface ReviewWithFile extends Review {
+  file?: { name: string } | null;
 }
 
 export default function ReviewsPage({ params }: Props) {
   const { workspaceId } = use(params);
   const supabase = createClient();
-  const [reviews, setReviews] = useState<ReviewWithDoc[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [reviews, setReviews] = useState<ReviewWithFile[]>([]);
+  const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [feedbackDialog, setFeedbackDialog] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: "", document_id: "", due_date: "" });
+  const [form, setForm] = useState({ title: "", file_id: "", due_date: "" });
   const [feedback, setFeedback] = useState({ text: "", rating: "4" });
   const [userId, setUserId] = useState("");
 
@@ -50,29 +50,30 @@ export default function ReviewsPage({ params }: Props) {
 
   async function loadData() {
     setLoading(true);
-    const [reviewsResult, docsResult] = await Promise.all([
-      supabase.from("reviews").select("*, document:documents(title)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
-      supabase.from("documents").select("id, title").eq("workspace_id", workspaceId),
+    const [reviewsResult, filesResult] = await Promise.all([
+      supabase.from("reviews").select("*, file:files(name)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+      supabase.from("files").select("id, name").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     ]);
-    setReviews((reviewsResult.data as ReviewWithDoc[]) ?? []);
-    setDocuments((docsResult.data as Document[]) ?? []);
+    setReviews((reviewsResult.data as ReviewWithFile[]) ?? []);
+    setFiles((filesResult.data as FileRecord[]) ?? []);
     setLoading(false);
   }
 
   async function handleCreate() {
-    if (!form.title || !form.document_id) { toast.error("Fill in required fields"); return; }
+    if (!form.title) { toast.error("Please enter a title"); return; }
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("reviews").insert({
       workspace_id: workspaceId,
       title: form.title,
-      document_id: form.document_id,
+      file_id: form.file_id || null,
+      document_id: null,
       due_date: form.due_date || null,
       submitted_by: user?.id,
     });
     if (error) { toast.error("Failed to create review"); return; }
     toast.success("Review submitted!");
     setDialogOpen(false);
-    setForm({ title: "", document_id: "", due_date: "" });
+    setForm({ title: "", file_id: "", due_date: "" });
     loadData();
   }
 
@@ -98,7 +99,7 @@ export default function ReviewsPage({ params }: Props) {
       <div className="flex items-center justify-between mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">Peer Review</h1>
-          <p className="text-sm text-muted-foreground mt-1">Submit and review team documents</p>
+          <p className="text-sm text-muted-foreground mt-1">Submit files for peer review and feedback</p>
         </div>
         <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
           <Plus className="h-4 w-4" /> Submit for Review
@@ -113,7 +114,7 @@ export default function ReviewsPage({ params }: Props) {
         <div className="flex flex-col items-center py-20 text-center fade-in stagger-2">
           <ClipboardCheck className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="font-semibold mb-2">No reviews yet</h3>
-          <p className="text-sm text-muted-foreground">Submit a document for peer review.</p>
+          <p className="text-sm text-muted-foreground">Submit a file for peer review to get started.</p>
         </div>
       ) : (
         <div className="space-y-4 fade-in stagger-2">
@@ -123,9 +124,9 @@ export default function ReviewsPage({ params }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <CardTitle className="text-base">{review.title}</CardTitle>
-                    {review.document && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Document: {review.document.title}
+                    {review.file && (
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <FileText className="h-3 w-3" /> {review.file.name}
                       </p>
                     )}
                   </div>
@@ -141,12 +142,7 @@ export default function ReviewsPage({ params }: Props) {
                     {review.due_date && ` · Due ${formatDate(review.due_date)}`}
                   </div>
                   {review.submitted_by !== userId && review.status !== "approved" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="pressable"
-                      onClick={() => setFeedbackDialog(review.id)}
-                    >
+                    <Button size="sm" variant="outline" className="pressable" onClick={() => setFeedbackDialog(review.id)}>
                       <Star className="h-3.5 w-3.5 mr-1" /> Give Feedback
                     </Button>
                   )}
@@ -167,12 +163,13 @@ export default function ReviewsPage({ params }: Props) {
               <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Q3 DCF Analysis Review" className="h-10" />
             </div>
             <div className="space-y-2">
-              <Label>Document *</Label>
-              <Select value={form.document_id} onValueChange={(v) => setForm({ ...form, document_id: v })}>
-                <SelectTrigger className="h-10"><SelectValue placeholder="Select a document" /></SelectTrigger>
+              <Label>File (optional)</Label>
+              <Select value={form.file_id} onValueChange={(v) => setForm({ ...form, file_id: v })}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Select a file" /></SelectTrigger>
                 <SelectContent>
-                  {documents.map((doc) => (
-                    <SelectItem key={doc.id} value={doc.id}>{doc.title}</SelectItem>
+                  <SelectItem value="">No file</SelectItem>
+                  {files.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -195,25 +192,23 @@ export default function ReviewsPage({ params }: Props) {
           <DialogHeader><DialogTitle>Submit Feedback</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Rating (1-5)</Label>
+              <Label>Rating (1–5)</Label>
               <Select value={feedback.rating} onValueChange={(v) => setFeedback({ ...feedback, rating: v })}>
                 <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[1, 2, 3, 4, 5].map((r) => (
-                    <SelectItem key={r} value={String(r)}>
-                      {"★".repeat(r)}{"☆".repeat(5 - r)} ({r}/5)
-                    </SelectItem>
+                    <SelectItem key={r} value={String(r)}>{"★".repeat(r)}{"☆".repeat(5 - r)} ({r}/5)</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Feedback</Label>
-              <Textarea value={feedback.text} onChange={(e) => setFeedback({ ...feedback, text: e.target.value })} placeholder="Detailed feedback…" rows={4} />
+              <Textarea value={feedback.text} onChange={(e) => setFeedback({ ...feedback, text: e.target.value })} placeholder="Your detailed feedback…" rows={4} />
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setFeedbackDialog(null)}>Cancel</Button>
-              <Button onClick={() => feedbackDialog && handleFeedback(feedbackDialog)} className="pressable">Submit Feedback</Button>
+              <Button onClick={() => feedbackDialog && handleFeedback(feedbackDialog)} className="pressable">Submit</Button>
             </div>
           </div>
         </DialogContent>

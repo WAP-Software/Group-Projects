@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, Users } from "lucide-react";
+import { CheckCircle, Clock, Users, Pencil, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Poll, PollVote } from "@/types/database";
@@ -19,9 +19,11 @@ interface PollOption {
 interface Props {
   poll: Poll;
   currentUserId: string;
+  onDelete?: () => void;
+  onEdit?: () => void;
 }
 
-export function PollWidget({ poll, currentUserId }: Props) {
+export function PollWidget({ poll, currentUserId, onDelete, onEdit }: Props) {
   const supabase = createClient();
   const [votes, setVotes] = useState<PollVote[]>([]);
   const [myVote, setMyVote] = useState<string[]>([]);
@@ -82,10 +84,20 @@ export function PollWidget({ poll, currentUserId }: Props) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base leading-snug">{poll.question}</CardTitle>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {expired && <Badge variant="secondary" className="text-xs">Closed</Badge>}
             {poll.multiple_choice && <Badge variant="outline" className="text-xs">Multi-choice</Badge>}
             {poll.anonymous && <Badge variant="outline" className="text-xs">Anonymous</Badge>}
+            {onEdit && (
+              <button onClick={onEdit} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" aria-label="Edit poll">
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={onDelete} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive" aria-label="Delete poll">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -114,7 +126,7 @@ export function PollWidget({ poll, currentUserId }: Props) {
                 isSelected && !hasVoted
                   ? "border-primary bg-primary/5"
                   : hasVoted && isMyChoice
-                  ? "border-green-500 bg-green-50 dark:bg-green-950 dark:text-green-100"
+                  ? "border-green-500"
                   : "border-border hover:border-primary/40 hover:bg-muted/30"
               } ${(hasVoted || expired) ? "cursor-default" : "cursor-pointer"}`}
             >

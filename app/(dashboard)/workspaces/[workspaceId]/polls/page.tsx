@@ -27,6 +27,7 @@ export default function PollsPage({ params }: Props) {
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingPoll, setEditingPoll] = useState<Poll | null>(null);
   const [form, setForm] = useState({
     question: "",
     multiple_choice: false,
@@ -57,24 +58,55 @@ export default function PollsPage({ params }: Props) {
     setLoading(false);
   }
 
-  async function handleCreate() {
+  function openCreate() {
+    setEditingPoll(null);
+    setForm({ question: "", multiple_choice: false, anonymous: false, expires_at: "", options: [{ id: uid(), text: "" }, { id: uid(), text: "" }] });
+    setDialogOpen(true);
+  }
+
+  function openEdit(poll: Poll) {
+    setEditingPoll(poll);
+    const opts = (poll.options as unknown as { id: string; text: string }[]);
+    setForm({
+      question: poll.question,
+      multiple_choice: poll.multiple_choice,
+      anonymous: poll.anonymous,
+      expires_at: poll.expires_at ? poll.expires_at.slice(0, 16) : "",
+      options: opts.map((o) => ({ id: o.id, text: o.text })),
+    });
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(pollId: string) {
+    await supabase.from("poll_votes").delete().eq("poll_id", pollId);
+    const { error } = await supabase.from("polls").delete().eq("id", pollId);
+    if (error) { toast.error("Failed to delete poll"); return; }
+    toast.success("Poll deleted");
+    setPolls((p) => p.filter((x) => x.id !== pollId));
+  }
+
+  async function handleSave() {
     if (!form.question.trim()) { toast.error("Enter a question"); return; }
     const validOptions = form.options.filter((o) => o.text.trim());
     if (validOptions.length < 2) { toast.error("At least 2 options required"); return; }
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("polls").insert({
-      workspace_id: workspaceId,
+    const payload = {
       question: form.question,
       options: validOptions,
       multiple_choice: form.multiple_choice,
       anonymous: form.anonymous,
       expires_at: form.expires_at || null,
-      created_by: user?.id,
-    });
-    if (error) { toast.error("Failed to create poll"); return; }
-    toast.success("Poll created!");
+    };
+    if (editingPoll) {
+      const { error } = await supabase.from("polls").update(payload).eq("id", editingPoll.id);
+      if (error) { toast.error("Failed to update poll"); return; }
+      toast.success("Poll updated!");
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("polls").insert({ workspace_id: workspaceId, created_by: user?.id, ...payload });
+      if (error) { toast.error("Failed to create poll"); return; }
+      toast.success("Poll created!");
+    }
     setDialogOpen(false);
-    setForm({ question: "", multiple_choice: false, anonymous: false, expires_at: "", options: [{ id: uid(), text: "" }, { id: uid(), text: "" }] });
     loadPolls();
   }
 
@@ -97,7 +129,7 @@ export default function PollsPage({ params }: Props) {
           <h1 className="text-2xl font-bold">Polls</h1>
           <p className="text-sm text-muted-foreground mt-1">Team voting with real-time results</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
+        <Button onClick={openCreate} className="gap-2 pressable">
           <Plus className="h-4 w-4" /> Create Poll
         </Button>
       </div>
@@ -111,14 +143,20 @@ export default function PollsPage({ params }: Props) {
           <Vote className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="font-semibold mb-2">No polls yet</h3>
           <p className="text-sm text-muted-foreground mb-6">Create a poll to gather team input.</p>
-          <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
+          <Button onClick={openCreate} className="gap-2 pressable">
             <Plus className="h-4 w-4" /> Create Poll
           </Button>
         </div>
       ) : (
         <div className="space-y-4 fade-in stagger-2">
           {polls.map((poll) => (
-            <PollWidget key={poll.id} poll={poll} currentUserId={userId} />
+            <PollWidget
+              key={poll.id}
+              poll={poll}
+              currentUserId={userId}
+              onEdit={() => openEdit(poll)}
+              onDelete={() => handleDelete(poll.id)}
+            />
           ))}
         </div>
       )}
@@ -126,7 +164,7 @@ export default function PollsPage({ params }: Props) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Poll</DialogTitle>
+            <DialogTitle>{editingPoll ? "Edit Poll" : "Create Poll"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -170,7 +208,7 @@ export default function PollsPage({ params }: Props) {
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} className="pressable">Create Poll</Button>
+              <Button onClick={handleSave} className="pressable">{editingPoll ? "Save" : "Create Poll"}</Button>
             </div>
           </div>
         </DialogContent>

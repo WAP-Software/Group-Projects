@@ -279,7 +279,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="max-w-2xl w-full h-[85vh] max-h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogContent hideCloseButton className="max-w-2xl w-full h-[85vh] max-h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
           <VisuallyHidden><DialogTitle>{file.name}</DialogTitle></VisuallyHidden>
           <VisuallyHidden><DialogDescription>File details</DialogDescription></VisuallyHidden>
           {/* Header */}
@@ -322,6 +322,13 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                     <Download className="h-4 w-4" />
                   </button>
                 )}
+                <button
+                  onClick={onClose}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             </div>
 
@@ -597,7 +604,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
 
       {/* Lightbox preview */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className={cn(
+        <DialogContent hideCloseButton className={cn(
           "p-0 flex flex-col gap-0",
           previewType === "csv" ? "max-w-[90vw] w-[90vw] h-[80vh]" : "max-w-[95vw] w-[95vw] h-[90vh]",
         )}>

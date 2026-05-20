@@ -494,7 +494,7 @@ function FileTable({
             <TableRow
               key={file.id}
               className="hover:bg-muted/30 transition-colors cursor-pointer"
-              onClick={() => onSelect(file)}
+              onClick={() => file.external_url ? window.open(file.external_url, "_blank") : onSelect(file)}
             >
               <TableCell>
                 <div className="flex items-center gap-2">

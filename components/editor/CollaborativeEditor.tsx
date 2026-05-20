@@ -1,16 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import Mention from "@tiptap/extension-mention";
-import * as Y from "yjs";
-import { WebsocketProvider } from "y-websocket";
 import { createClient } from "@/lib/supabase/client";
-import { generateCursorColor } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -29,67 +23,13 @@ interface Props {
 
 export function CollaborativeEditor({ docId, workspaceId, readOnly = false }: Props) {
   const supabase = createClient();
-
-  // Y.Doc must be created eagerly (not in useEffect) so it's ready for useEditor
-  const ydocRef = useRef<Y.Doc>(new Y.Doc());
-  const [provider, setProvider] = useState<WebsocketProvider | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [profile, setProfile] = useState<{ id: string; full_name: string | null; color: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      supabase.from("profiles").select("id, full_name").eq("id", user.id).single().then(({ data }) => {
-        setProfile({ id: user.id, full_name: data?.full_name ?? "Anonymous", color: generateCursorColor(user.id) });
-      });
-    });
-  }, []);
-
-  useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_YJS_WS_URL;
-    // Skip if no real WebSocket server configured yet
-    if (!wsUrl || wsUrl.includes("placeholder") || wsUrl.includes("localhost")) {
-      return;
-    }
-
-    let p: WebsocketProvider | null = null;
-    try {
-      p = new WebsocketProvider(wsUrl, `doc-${docId}`, ydocRef.current, {
-        connect: true,
-      });
-      p.on("status", ({ status }: { status: string }) => {
-        setConnected(status === "connected");
-      });
-      setProvider(p);
-    } catch (e) {
-      console.warn("Y.js WebSocket unavailable, running in offline mode");
-    }
-
-    return () => {
-      p?.destroy();
-      setProvider(null);
-      setConnected(false);
-    };
-  }, [docId]);
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: false }),
-      // Y.Doc is always ready — editor works offline too
-      Collaboration.configure({ document: ydocRef.current }),
-      // Cursors only when there's a live WebSocket connection
-      ...(provider
-        ? [
-            CollaborationCursor.configure({
-              provider,
-              user: profile
-                ? { name: profile.full_name ?? "Anonymous", color: profile.color }
-                : { name: "Anonymous", color: "#94a3b8" },
-            }),
-          ]
-        : []),
+      StarterKit,
       Mention.configure({
         suggestion: {
           items: async ({ query }) => {
@@ -118,9 +58,20 @@ export function CollaborativeEditor({ docId, workspaceId, readOnly = false }: Pr
           updated_at: new Date().toISOString(),
         }).eq("id", docId);
         setSaving(false);
+        setLastSaved(new Date());
       }, 1500);
     },
-  }, [provider, profile]);
+  });
+
+  // Load existing content
+  useEffect(() => {
+    if (!editor) return;
+    supabase.from("documents").select("content").eq("id", docId).single().then(({ data }) => {
+      if (data?.content) {
+        editor.commands.setContent(data.content as any);
+      }
+    });
+  }, [editor, docId]);
 
   if (!editor) {
     return (
@@ -154,10 +105,10 @@ export function CollaborativeEditor({ docId, workspaceId, readOnly = false }: Pr
             <ToolbarButton onClick={() => editor.chain().focus().undo().run()} aria-label="Undo"><Undo2 className="h-4 w-4" /></ToolbarButton>
             <ToolbarButton onClick={() => editor.chain().focus().redo().run()} aria-label="Redo"><Redo2 className="h-4 w-4" /></ToolbarButton>
             <div className="ml-auto flex items-center gap-2">
-              {saving && <span className="text-xs text-muted-foreground">Saving…</span>}
-              <Badge variant={connected ? "default" : "secondary"} className={cn("text-xs", connected && "bg-green-500")}>
-                {connected ? "Live" : "Offline"}
-              </Badge>
+              {saving
+                ? <span className="text-xs text-muted-foreground">Saving…</span>
+                : lastSaved && <span className="text-xs text-muted-foreground">Saved</span>
+              }
             </div>
           </div>
         )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getFileUrl } from "@/lib/cloudflare/r2";
+import { getFileUrl, downloadFile } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -131,14 +131,13 @@ export function FileDetailPanel({ file, workspaceId, open, onClose }: Props) {
                 <span className="text-xs text-muted-foreground">{formatDate(file.created_at)}</span>
               </div>
             </div>
-            <a
-              href={fileUrl}
-              download={file.name}
+            <button
+              onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download fehlgeschlagen"))}
               className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
               aria-label="Download"
             >
               <Download className="h-4 w-4" />
-            </a>
+            </button>
           </div>
         </div>
 

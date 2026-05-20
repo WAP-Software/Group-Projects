@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { uploadToR2, getFileUrl, deleteFromR2 } from "@/lib/cloudflare/r2";
+import { uploadToR2, deleteFromR2, downloadFile } from "@/lib/cloudflare/r2";
 import { formatBytes, formatDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,11 +124,11 @@ export function FileVault({ workspaceId }: Props) {
   }
 
   async function handleDownload(file: FileRecord) {
-    const url = getFileUrl(file.r2_key);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.original_name;
-    a.click();
+    try {
+      await downloadFile(file.r2_key, file.original_name);
+    } catch {
+      toast.error("Download fehlgeschlagen");
+    }
   }
 
   async function handleDelete(file: FileRecord) {

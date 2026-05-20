@@ -36,6 +36,21 @@ export function getFileUrl(r2Key: string): string {
   return `${CF_WORKER_URL}/files/${encodeURIComponent(r2Key)}`;
 }
 
+export async function downloadFile(r2Key: string, filename: string): Promise<void> {
+  const url = getFileUrl(r2Key);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 export async function deleteFromR2(r2Key: string, token: string): Promise<void> {
   const response = await fetch(
     `${CF_WORKER_URL}/files/${encodeURIComponent(r2Key)}`,

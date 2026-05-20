@@ -22,7 +22,7 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <TopNav profile={profile!} />
-      <main className="flex flex-1 flex-col">{children}</main>
+      <div className="flex flex-1 flex-col">{children}</div>
     </div>
   );
 }

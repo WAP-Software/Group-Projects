@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { TaskDetailPanel } from "@/components/kanban/TaskDetailPanel";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, ClipboardCheck, Flag } from "lucide-react";
 import { getInitials, cn } from "@/lib/utils";
@@ -70,8 +68,6 @@ export function GanttView({ workspaceId }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const todayRef = useRef<HTMLDivElement>(null);
 
@@ -114,15 +110,8 @@ export function GanttView({ workspaceId }: Props) {
     ];
     const without = tasks.filter((t) => !t.due_date);
 
-    const filtered = withDates.filter((item) => {
-      const key = toDateKey(item.kind === "task" ? item.data.due_date! : item.data.due_date!);
-      if (rangeStart && key < rangeStart) return false;
-      if (rangeEnd && key > rangeEnd) return false;
-      return true;
-    });
-
     const map = new Map<string, TimelineItem[]>();
-    for (const item of filtered) {
+    for (const item of withDates) {
       const key = toDateKey(item.kind === "task" ? item.data.due_date! : item.data.due_date!);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(item);
@@ -148,7 +137,7 @@ export function GanttView({ workspaceId }: Props) {
     }));
 
     return { dayGroups: groups, unscheduled: without };
-  }, [tasks, reviews, rangeStart, rangeEnd, todayKey]);
+  }, [tasks, reviews, todayKey]);
 
   async function handleUpdate(id: string, data: Partial<Task>) {
     await supabase.from("tasks").update(data).eq("id", id);
@@ -189,25 +178,12 @@ export function GanttView({ workspaceId }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ── Controls ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="h-8 w-36 text-xs" />
-          <span className="text-muted-foreground text-xs">–</span>
-          <Input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="h-8 w-36 text-xs" />
-          {(rangeStart || rangeEnd) && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground"
-              onClick={() => { setRangeStart(""); setRangeEnd(""); }}>
-              Reset
-            </Button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground ml-auto">
-          {Object.entries(TASK_STATUS_COLOR).map(([s, c]) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
-              <span>{TASK_STATUS_LABEL[s]}</span>
+      {/* ── Legend ── */}
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {Object.entries(TASK_STATUS_COLOR).map(([s, c]) => (
+          <div key={s} className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
+            <span>{TASK_STATUS_LABEL[s]}</span>
             </div>
           ))}
           <div className="flex items-center gap-1.5">
@@ -215,12 +191,11 @@ export function GanttView({ workspaceId }: Props) {
             <span>Review</span>
           </div>
         </div>
-      </div>
 
       {/* ── Vertical timeline ── */}
       {dayGroups.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          No entries in the selected time range.
+          No scheduled entries.
         </div>
       ) : (
         <div className="relative">

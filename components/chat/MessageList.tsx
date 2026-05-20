@@ -7,6 +7,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Message } from "@/types/database";
 import { cn } from "@/lib/utils";
 
+function renderContent(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
 interface MessageWithProfile extends Message {
   profile?: { full_name: string | null; avatar_url: string | null };
 }
@@ -88,7 +97,7 @@ export function MessageList({ messages, currentUserId }: Props) {
                     {msg.edited && <span className="text-xs text-muted-foreground">(edited)</span>}
                   </div>
                 )}
-                <p className="text-sm text-foreground/90 break-words leading-relaxed">{msg.content}</p>
+                <p className="text-sm text-foreground/90 break-words leading-relaxed">{renderContent(msg.content)}</p>
               </div>
             </div>
           </div>

@@ -5,10 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Hash, ChevronDown } from "lucide-react";
+import { Hash, ChevronDown, ChevronLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Channel } from "@/types/database";
 
 interface Props {
@@ -20,6 +19,8 @@ export function ChatPanel({ workspaceId }: Props) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [profile, setProfile] = useState<{ id: string; full_name: string | null } | null>(null);
+  // Mobile: show channel list (true) or messages (false)
+  const [showSidebar, setShowSidebar] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -29,16 +30,17 @@ export function ChatPanel({ workspaceId }: Props) {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const [profileResult, channelsResult] = await Promise.all([
         supabase.from("profiles").select("id, full_name").eq("id", user.id).single(),
         supabase.from("channels").select("*").eq("workspace_id", workspaceId).order("created_at"),
       ]);
-
       if (profileResult.data) setProfile(profileResult.data);
       if (channelsResult.data?.length) {
         setChannels(channelsResult.data);
-        setActiveChannel(channelsResult.data.find((c) => c.is_default) ?? channelsResult.data[0]);
+        const defaultCh = channelsResult.data.find((c) => c.is_default) ?? channelsResult.data[0];
+        setActiveChannel(defaultCh);
+        // On desktop start with messages visible; on mobile start on sidebar
+        if (window.innerWidth >= 768) setShowSidebar(false);
       }
     }
     init();
@@ -48,6 +50,11 @@ export function ChatPanel({ workspaceId }: Props) {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
+
+  function selectChannel(ch: Channel) {
+    setActiveChannel(ch);
+    setShowSidebar(false); // always navigate to messages after picking a channel
+  }
 
   async function handleSend(content: string) {
     if (!activeChannel || !profile) return;
@@ -59,22 +66,28 @@ export function ChatPanel({ workspaceId }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden">
-      {/* Channel list */}
-      <div className="w-48 shrink-0 border-r border-border bg-sidebar/50 flex flex-col">
-        <div className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden relative">
+      {/* ── Channel sidebar ── */}
+      <div className={cn(
+        "flex flex-col border-r border-border bg-sidebar/50",
+        // Mobile: full-screen overlay toggled by state
+        "absolute inset-0 z-10 md:static md:inset-auto md:z-auto md:w-48 md:shrink-0",
+        showSidebar ? "flex" : "hidden md:flex",
+      )}>
+        <div className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">
           Channels
         </div>
-        <div className="flex-1 space-y-0.5 px-2">
+        <div className="flex-1 overflow-y-auto space-y-0.5 px-2 py-2">
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => setActiveChannel(ch)}
-              className={`flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors ${
+              onClick={() => selectChannel(ch)}
+              className={cn(
+                "flex items-center gap-2 w-full rounded-md px-3 py-2.5 text-sm transition-colors text-left",
                 activeChannel?.id === ch.id
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
             >
               <Hash className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{ch.name}</span>
@@ -90,7 +103,7 @@ export function ChatPanel({ workspaceId }: Props) {
               const name = prompt("Channel name:");
               if (!name) return;
               const { data } = await supabase.from("channels").insert({ workspace_id: workspaceId, name }).select().single();
-              if (data) { setChannels((prev) => [...prev, data]); setActiveChannel(data); }
+              if (data) { setChannels((prev) => [...prev, data]); selectChannel(data); }
             }}
           >
             + Add channel
@@ -98,19 +111,31 @@ export function ChatPanel({ workspaceId }: Props) {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* ── Messages pane ── */}
+      <div className={cn(
+        "flex flex-1 flex-col overflow-hidden",
+        showSidebar ? "hidden md:flex" : "flex",
+      )}>
         {activeChannel ? (
           <>
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
-              <Hash className="h-4 w-4 text-muted-foreground" />
+            {/* Channel header */}
+            <div className="flex items-center gap-2 px-3 md:px-4 py-3 border-b border-border shrink-0">
+              {/* Back button — mobile only */}
+              <button
+                className="md:hidden flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted transition-colors"
+                onClick={() => setShowSidebar(true)}
+                aria-label="Back to channels"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <Hash className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="font-semibold">{activeChannel.name}</span>
               {activeChannel.description && (
-                <span className="text-xs text-muted-foreground">· {activeChannel.description}</span>
+                <span className="text-xs text-muted-foreground truncate">· {activeChannel.description}</span>
               )}
             </div>
 
-            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4">
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 md:px-4">
               {hasMore && (
                 <div className="flex justify-center py-3">
                   <Button variant="ghost" size="sm" onClick={loadMore} className="text-xs text-muted-foreground">

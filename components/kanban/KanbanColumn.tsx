@@ -41,7 +41,7 @@ export function KanbanColumn({
 
   async function handleAdd() {
     if (!title.trim()) return;
-    await onCreateTask({
+    const result = await onCreateTask({
       workspace_id: workspaceId,
       title: title.trim(),
       status: columnId,
@@ -50,6 +50,7 @@ export function KanbanColumn({
     });
     setTitle("");
     setAdding(false);
+    if (result?.id) onOpenDetail(result.id);
   }
 
   return (

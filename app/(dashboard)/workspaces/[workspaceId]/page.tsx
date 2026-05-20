@@ -19,17 +19,19 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
   const { workspaceId } = await params;
   const supabase = await createClient();
 
-  const [wsResult, membersResult, allTasksResult, filesResult] = await Promise.all([
+  const [wsResult, membersResult, allTasksResult, filesResult, filesCountResult] = await Promise.all([
     supabase.from("workspaces").select("*").eq("id", workspaceId).single(),
     supabase.from("workspace_members").select("*, profile:profiles(*)").eq("workspace_id", workspaceId),
     supabase.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     supabase.from("files").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(6),
+    supabase.from("files").select("*", { count: "exact", head: true }).eq("workspace_id", workspaceId),
   ]);
 
   const ws = wsResult.data as Workspace | null;
   const members = (membersResult.data ?? []) as Array<WorkspaceMember & { profile: Profile }>;
   const allTasks = (allTasksResult.data ?? []) as Task[];
   const recentFiles = (filesResult.data ?? []) as FileRecord[];
+  const totalFiles = filesCountResult.count ?? 0;
 
   const today = new Date();
   const in14Days = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
@@ -103,7 +105,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
           {[
             { label: "Members", value: members.length, icon: Users, color: "text-blue-500" },
             { label: "Open Tasks", value: allTasks.filter((t) => t.status !== "done").length, icon: Kanban, color: "text-violet-500" },
-            { label: "Files", value: recentFiles.length, icon: FolderOpen, color: "text-amber-500" },
+            { label: "Files", value: totalFiles, icon: FolderOpen, color: "text-amber-500" },
             { label: "Completed", value: doneTasks, icon: CheckCircle2, color: "text-green-500" },
           ].map(({ label, value, icon: Icon, color }) => (
             <Card key={label} className="border-border/50">

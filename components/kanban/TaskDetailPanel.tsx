@@ -4,12 +4,10 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadToR2, getFileUrl, deleteFromR2 } from "@/lib/cloudflare/r2";
 import { formatDate, formatBytes, getInitials, priorityColor, cn } from "@/lib/utils";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,8 +16,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
-  Flag, Calendar, User, Trash2, Plus, Send, Paperclip,
-  Download, X, File, FileText, Image, Upload,
+  Flag, Calendar, User, Trash2, Plus, Send,
+  Download, X, File, FileText, ImageIcon, Upload, CloudUpload,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Task, TaskSubtask, TaskComment, FileRecord, Profile } from "@/types/database";
@@ -39,7 +37,7 @@ interface Props {
 
 function fileIcon(mime: string | null) {
   if (!mime) return <File className="h-4 w-4 text-muted-foreground" />;
-  if (mime.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
+  if (mime.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />;
   if (mime === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
   return <File className="h-4 w-4 text-slate-400" />;
 }
@@ -59,6 +57,7 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const descSaveRef = useRef<ReturnType<typeof setTimeout>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
@@ -70,11 +69,13 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     const [taskRes, subtasksRes, commentsRes, filesRes] = await Promise.all([
       supabase.from("tasks").select("*").eq("id", taskId).single(),
       supabase.from("task_subtasks").select("*").eq("task_id", taskId).order("position"),
-      supabase.from("task_comments")
+      supabase
+        .from("task_comments")
         .select("*, profile:profiles(id, full_name, avatar_url, email)")
         .eq("task_id", taskId)
         .order("created_at"),
-      supabase.from("task_files")
+      supabase
+        .from("task_files")
         .select("*, file:files(*)")
         .eq("task_id", taskId)
         .order("created_at"),
@@ -92,8 +93,7 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
 
   async function handleFieldChange(field: keyof Task, value: any) {
     if (!task) return;
-    const updated = { ...task, [field]: value };
-    setTask(updated as Task);
+    setTask({ ...task, [field]: value } as Task);
     await onUpdate(task.id, { [field]: value });
   }
 
@@ -108,25 +108,24 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     }, 1200);
   }
 
-  // — Subtasks —
   async function addSubtask() {
     if (!newSubtask.trim() || !task) return;
-    const { data } = await supabase.from("task_subtasks").insert({
-      task_id: task.id,
-      title: newSubtask.trim(),
-      position: subtasks.length,
-    }).select().single();
+    const { data } = await supabase
+      .from("task_subtasks")
+      .insert({ task_id: task.id, title: newSubtask.trim(), position: subtasks.length })
+      .select()
+      .single();
     if (data) setSubtasks((s) => [...s, data as TaskSubtask]);
     setNewSubtask("");
   }
 
   async function toggleSubtask(id: string, completed: boolean) {
-    setSubtasks((s) => s.map((st) => st.id === id ? { ...st, completed } : st));
+    setSubtasks((s) => s.map((st) => (st.id === id ? { ...st, completed } : st)));
     await supabase.from("task_subtasks").update({ completed }).eq("id", id);
   }
 
   async function assignSubtask(id: string, userId: string | null) {
-    setSubtasks((s) => s.map((st) => st.id === id ? { ...st, assigned_to: userId } : st));
+    setSubtasks((s) => s.map((st) => (st.id === id ? { ...st, assigned_to: userId } : st)));
     await supabase.from("task_subtasks").update({ assigned_to: userId }).eq("id", id);
   }
 
@@ -135,14 +134,13 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     await supabase.from("task_subtasks").delete().eq("id", id);
   }
 
-  // — Comments —
   async function addComment() {
     if (!newComment.trim() || !task || !currentUserId) return;
-    const { data } = await supabase.from("task_comments").insert({
-      task_id: task.id,
-      user_id: currentUserId,
-      content: newComment.trim(),
-    }).select("*, profile:profiles(id, full_name, avatar_url, email)").single();
+    const { data } = await supabase
+      .from("task_comments")
+      .insert({ task_id: task.id, user_id: currentUserId, content: newComment.trim() })
+      .select("*, profile:profiles(id, full_name, avatar_url, email)")
+      .single();
     if (data) setComments((c) => [...c, data as any]);
     setNewComment("");
   }
@@ -152,13 +150,11 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     await supabase.from("task_comments").delete().eq("id", id);
   }
 
-  // — File upload —
   async function uploadFile(file: File) {
     if (!task) return;
     const { data: { user } } = await supabase.auth.getUser();
     const { data: { session } } = await supabase.auth.getSession();
     if (!user || !session?.access_token) { toast.error("Not authenticated"); return; }
-
     setUploading(true);
     try {
       const { key } = await uploadToR2(file, workspaceId, user.id, session.access_token);
@@ -174,7 +170,10 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
       }).select().single();
       if (fileRecord) {
         await supabase.from("task_files").insert({ task_id: task.id, file_id: fileRecord.id });
-        setAttachments((a) => [...a, { id: crypto.randomUUID(), task_id: task.id, file_id: fileRecord.id, file: fileRecord as FileRecord } as TaskFileRow]);
+        setAttachments((a) => [...a, {
+          id: crypto.randomUUID(), task_id: task.id,
+          file_id: fileRecord.id, file: fileRecord as FileRecord,
+        } as TaskFileRow]);
       }
       toast.success("File attached");
     } catch {
@@ -198,144 +197,143 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     onClose();
   }
 
+  function onDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current++;
+    setDragging(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setDragging(false);
+  }
+  function onDragOver(e: React.DragEvent) { e.preventDefault(); }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) uploadFile(f);
+  }
+
   const subtaskDone = subtasks.filter((s) => s.completed).length;
   const subtaskTotal = subtasks.length;
   const memberById = Object.fromEntries(members.map((m) => [m.user_id, m]));
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg p-0 flex flex-col gap-0"
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          const f = e.dataTransfer.files[0];
-          if (f) uploadFile(f);
-        }}
-      >
-        {dragging && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg pointer-events-none">
-            <p className="text-primary font-semibold">Drop to attach file</p>
-          </div>
-        )}
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-3xl h-[90vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <div
+          className="flex flex-col h-full overflow-hidden relative"
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
+          {dragging && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-primary/5 border-2 border-dashed border-primary rounded-lg pointer-events-none">
+              <CloudUpload className="h-10 w-10 text-primary" />
+              <p className="text-primary font-semibold text-lg">Drop to attach file</p>
+            </div>
+          )}
 
-        {loading || !task ? (
-          <div className="p-6 space-y-4">
-            <Skeleton className="h-8 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-24 w-full" />
-          </div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="p-5 border-b border-border space-y-3">
-              <div className="flex items-start gap-2">
+          {loading || !task ? (
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : (
+            <>
+              {/* Sticky header */}
+              <div className="px-6 pt-5 pb-4 border-b border-border space-y-3 shrink-0 pr-12">
                 <input
-                  className="flex-1 text-lg font-semibold bg-transparent border-none outline-none focus:ring-0 resize-none leading-snug"
+                  className="w-full text-xl font-semibold bg-transparent border-none outline-none focus:ring-0 leading-snug"
                   value={task.title}
                   onChange={(e) => setTask({ ...task, title: e.target.value })}
                   onBlur={(e) => handleFieldChange("title", e.target.value)}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={handleDelete}
-                  aria-label="Delete task"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={task.status} onValueChange={(v) => handleFieldChange("status", v)}>
+                    <SelectTrigger className="h-7 text-xs w-auto px-2 gap-1.5 border-border/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="backlog">Backlog</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="review">Review</SelectItem>
+                      <SelectItem value="done">Done</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-              {/* Meta row */}
-              <div className="flex flex-wrap gap-2">
-                {/* Status */}
-                <Select value={task.status} onValueChange={(v) => handleFieldChange("status", v)}>
-                  <SelectTrigger className="h-7 text-xs w-auto px-2 gap-1.5 border-border/60">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="backlog">Backlog</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="review">Review</SelectItem>
-                    <SelectItem value="done">Done</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Select value={task.priority} onValueChange={(v) => handleFieldChange("priority", v)}>
+                    <SelectTrigger className={cn("h-7 text-xs w-auto px-2 gap-1.5", priorityColor(task.priority))}>
+                      <Flag className="h-3 w-3" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                {/* Priority */}
-                <Select value={task.priority} onValueChange={(v) => handleFieldChange("priority", v)}>
-                  <SelectTrigger className={cn("h-7 text-xs w-auto px-2 gap-1.5", priorityColor(task.priority))}>
-                    <Flag className="h-3 w-3" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <div className="flex items-center gap-1.5 h-7 px-2 rounded-md border border-border/60 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <input
+                      type="date"
+                      value={task.due_date ?? ""}
+                      onChange={(e) => handleFieldChange("due_date", e.target.value || null)}
+                      className="bg-transparent border-none outline-none text-xs w-28"
+                    />
+                  </div>
 
-                {/* Due date */}
-                <div className="flex items-center gap-1.5 h-7 px-2 rounded-md border border-border/60 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  <input
-                    type="date"
-                    value={task.due_date ?? ""}
-                    onChange={(e) => handleFieldChange("due_date", e.target.value || null)}
-                    className="bg-transparent border-none outline-none text-xs w-28"
-                  />
+                  <Select
+                    value={task.assigned_to ?? "unassigned"}
+                    onValueChange={(v) => handleFieldChange("assigned_to", v === "unassigned" ? null : v)}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-auto px-2 gap-1.5 border-border/60">
+                      <User className="h-3 w-3" />
+                      <SelectValue placeholder="Assign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {members.map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>
+                          {m.profile?.full_name ?? m.profile?.email ?? m.user_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <div className="ml-auto">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={handleDelete}
+                      aria-label="Delete task"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-
-                {/* Assignee */}
-                <Select
-                  value={task.assigned_to ?? "unassigned"}
-                  onValueChange={(v) => handleFieldChange("assigned_to", v === "unassigned" ? null : v)}
-                >
-                  <SelectTrigger className="h-7 text-xs w-auto px-2 gap-1.5 border-border/60">
-                    <User className="h-3 w-3" />
-                    <SelectValue placeholder="Assign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {members.map((m) => (
-                      <SelectItem key={m.user_id} value={m.user_id}>
-                        {m.profile?.full_name ?? m.profile?.email ?? m.user_id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-            </div>
 
-            {/* Tabs */}
-            <Tabs defaultValue="details" className="flex flex-col flex-1 overflow-hidden">
-              <TabsList className="rounded-none border-b border-border bg-transparent h-10 px-5 justify-start gap-1 shrink-0">
-                <TabsTrigger value="details" className="text-sm data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                  Details
-                </TabsTrigger>
-                <TabsTrigger value="files" className="text-sm data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                  Files {attachments.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({attachments.length})</span>}
-                </TabsTrigger>
-                <TabsTrigger value="comments" className="text-sm data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-                  Comments {comments.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({comments.length})</span>}
-                </TabsTrigger>
-              </TabsList>
+              {/* Scrollable content — all sections visible at once */}
+              <ScrollArea className="flex-1">
+                <div className="px-6 py-5 space-y-6">
 
-              {/* Details */}
-              <TabsContent value="details" className="flex-1 overflow-y-auto m-0">
-                <div className="p-5 space-y-5">
                   {/* Description */}
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</label>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</p>
                     <Textarea
                       value={task.description ?? ""}
                       onChange={(e) => handleDescriptionChange(e.target.value)}
                       placeholder="Add a description…"
-                      rows={4}
+                      rows={3}
                       className="resize-none text-sm"
                     />
                     {saving && <p className="text-xs text-muted-foreground">Saving…</p>}
@@ -346,7 +344,7 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                   {/* Subtasks */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subtasks</label>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subtasks</p>
                       {subtaskTotal > 0 && (
                         <span className="text-xs text-muted-foreground tabular-nums">{subtaskDone}/{subtaskTotal}</span>
                       )}
@@ -356,7 +354,7 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                       <Progress value={(subtaskDone / subtaskTotal) * 100} className="h-1.5" />
                     )}
 
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       {subtasks.map((st) => {
                         const assignedMember = st.assigned_to ? memberById[st.assigned_to] : null;
                         return (
@@ -369,7 +367,6 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                             <span className={cn("flex-1 text-sm", st.completed && "line-through text-muted-foreground")}>
                               {st.title}
                             </span>
-                            {/* Assignee picker */}
                             <Select
                               value={st.assigned_to ?? "unassigned"}
                               onValueChange={(v) => assignSubtask(st.id, v === "unassigned" ? null : v)}
@@ -399,7 +396,7 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                             </Select>
                             <button
                               onClick={() => deleteSubtask(st.id)}
-                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
                               aria-label="Delete subtask"
                             >
                               <X className="h-3.5 w-3.5" />
@@ -409,7 +406,6 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                       })}
                     </div>
 
-                    {/* Add subtask */}
                     <div className="flex gap-2">
                       <Input
                         value={newSubtask}
@@ -423,135 +419,148 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                       </Button>
                     </div>
                   </div>
-                </div>
-              </TabsContent>
 
-              {/* Files */}
-              <TabsContent value="files" className="flex-1 overflow-y-auto m-0">
-                <div className="p-5 space-y-3">
-                  {/* Upload area */}
-                  <label
-                    className={cn(
-                      "flex flex-col items-center gap-2 w-full rounded-xl border-2 border-dashed p-6 cursor-pointer transition-colors",
-                      dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30",
-                    )}
-                  >
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {uploading ? "Uploading…" : "Click or drag & drop to attach"}
-                    </span>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="sr-only"
-                      disabled={uploading}
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
-                    />
-                  </label>
+                  <Separator />
 
-                  {/* File list */}
-                  {attachments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No files attached yet</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {attachments.map((att) => (
-                        <div key={att.id} className="group flex items-center gap-3 p-2.5 rounded-lg border border-border/50 hover:border-border transition-colors">
-                          {fileIcon(att.file?.mime_type ?? null)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{att.file?.name ?? "File"}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {att.file?.size_bytes ? formatBytes(att.file.size_bytes) : ""}
-                            </p>
-                          </div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <a
-                              href={getFileUrl(att.file?.r2_key ?? "")}
-                              download={att.file?.name}
-                              className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                              aria-label="Download"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
-                            <button
-                              onClick={() => detachFile(att.id, att.file?.r2_key ?? "")}
-                              className="flex h-7 w-7 items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                              aria-label="Remove file"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
+                  {/* Attachments */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Attachments
+                      {attachments.length > 0 && (
+                        <span className="ml-1 normal-case font-normal text-muted-foreground">({attachments.length})</span>
+                      )}
+                    </p>
 
-              {/* Comments */}
-              <TabsContent value="comments" className="flex-1 overflow-hidden m-0 flex flex-col">
-                <ScrollArea className="flex-1">
-                  <div className="p-5 space-y-4">
-                    {comments.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">No comments yet. Start the discussion!</p>
-                    ) : (
-                      comments.map((cm) => {
-                        const p = (cm as any).profile as Profile | null;
-                        return (
-                          <div key={cm.id} className="group flex gap-3">
-                            <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                              <AvatarImage src={p?.avatar_url ?? undefined} />
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                {getInitials(p?.full_name ?? p?.email ?? "?")}
-                              </AvatarFallback>
-                            </Avatar>
+                    <label className={cn(
+                      "flex items-center gap-3 w-full rounded-lg border-2 border-dashed px-4 py-3 cursor-pointer transition-colors",
+                      dragging
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50 hover:bg-muted/30",
+                    )}>
+                      <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm text-muted-foreground">
+                        {uploading ? "Uploading…" : "Click or drag & drop to attach a file"}
+                      </span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="sr-only"
+                        disabled={uploading}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
+                      />
+                    </label>
+
+                    {attachments.length > 0 && (
+                      <div className="space-y-1.5">
+                        {attachments.map((att) => (
+                          <div key={att.id} className="group flex items-center gap-3 p-2.5 rounded-lg border border-border/50 hover:border-border transition-colors">
+                            {fileIcon(att.file?.mime_type ?? null)}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-sm font-medium">{p?.full_name ?? p?.email ?? "Unknown"}</span>
-                                <span className="text-xs text-muted-foreground">{formatDate(cm.created_at)}</span>
-                              </div>
-                              <p className="text-sm text-foreground/90 mt-0.5 whitespace-pre-wrap">{cm.content}</p>
+                              <p className="text-sm font-medium truncate">{att.file?.name ?? "File"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {att.file?.size_bytes ? formatBytes(att.file.size_bytes) : ""}
+                              </p>
                             </div>
-                            {cm.user_id === currentUserId && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <a
+                                href={getFileUrl(att.file?.r2_key ?? "")}
+                                download={att.file?.name}
+                                className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                aria-label="Download"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
                               <button
-                                onClick={() => deleteComment(cm.id)}
-                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0 mt-1"
-                                aria-label="Delete comment"
+                                onClick={() => detachFile(att.id, att.file?.r2_key ?? "")}
+                                className="flex h-7 w-7 items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                                aria-label="Remove file"
                               >
                                 <X className="h-3.5 w-3.5" />
                               </button>
-                            )}
+                            </div>
                           </div>
-                        );
-                      })
+                        ))}
+                      </div>
                     )}
                   </div>
-                </ScrollArea>
 
-                {/* Comment input */}
-                <div className="border-t border-border p-3 flex gap-2">
-                  <Textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Write a comment…"
-                    rows={2}
-                    className="resize-none text-sm flex-1"
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(); } }}
-                  />
-                  <Button
-                    size="icon"
-                    className="h-9 w-9 shrink-0 self-end pressable"
-                    onClick={addComment}
-                    disabled={!newComment.trim()}
-                    aria-label="Send comment"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  <Separator />
+
+                  {/* Comments */}
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Comments
+                      {comments.length > 0 && (
+                        <span className="ml-1 normal-case font-normal text-muted-foreground">({comments.length})</span>
+                      )}
+                    </p>
+
+                    {comments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-3">No comments yet</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {comments.map((cm) => {
+                          const p = (cm as any).profile as Profile | null;
+                          return (
+                            <div key={cm.id} className="group flex gap-3">
+                              <Avatar className="h-7 w-7 shrink-0 mt-0.5">
+                                <AvatarImage src={p?.avatar_url ?? undefined} />
+                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                                  {getInitials(p?.full_name ?? p?.email ?? "?")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-sm font-medium">{p?.full_name ?? p?.email ?? "Unknown"}</span>
+                                  <span className="text-xs text-muted-foreground">{formatDate(cm.created_at)}</span>
+                                </div>
+                                <p className="text-sm text-foreground/90 mt-0.5 whitespace-pre-wrap">{cm.content}</p>
+                              </div>
+                              {cm.user_id === currentUserId && (
+                                <button
+                                  onClick={() => deleteComment(cm.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0 mt-1"
+                                  aria-label="Delete comment"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                      <Textarea
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Write a comment…"
+                        rows={2}
+                        className="resize-none text-sm flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(); }
+                        }}
+                      />
+                      <Button
+                        size="icon"
+                        className="h-9 w-9 shrink-0 self-end pressable"
+                        onClick={addComment}
+                        disabled={!newComment.trim()}
+                        aria-label="Send comment"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="h-4" />
                 </div>
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
+              </ScrollArea>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

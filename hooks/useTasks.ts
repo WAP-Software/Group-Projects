@@ -88,8 +88,12 @@ export function useTasks(workspaceId: string) {
   }
 
   async function createTask(data: Partial<Task>) {
-    const { error } = await supabase.from("tasks").insert(data as any);
-    return error;
+    const { data: created, error } = await supabase
+      .from("tasks")
+      .insert(data as any)
+      .select()
+      .single();
+    return { id: (created as any)?.id as string ?? null, error };
   }
 
   async function updateTask(id: string, data: Partial<Task>) {

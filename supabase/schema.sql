@@ -84,7 +84,10 @@ $$;
 grant execute on function public.get_my_workspace_ids() to authenticated, anon;
 
 create policy "workspace_member_select" on public.workspaces for select
-  using (id in (select public.get_my_workspace_ids()));
+  using (
+    id in (select public.get_my_workspace_ids())
+    or created_by = auth.uid()
+  );
 
 create policy "workspace_insert" on public.workspaces for insert
   with check (auth.uid() is not null);

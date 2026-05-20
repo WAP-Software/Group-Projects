@@ -46,10 +46,10 @@ const REVIEW_STATUS_LABEL: Record<string, string> = {
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
-  low: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300",
-  medium: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
-  urgent: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+  low: "bg-slate-500 text-white",
+  medium: "bg-blue-500 text-white",
+  high: "bg-orange-500 text-white",
+  urgent: "bg-red-500 text-white",
 };
 
 function toDateKey(d: string | Date): string {
@@ -287,15 +287,15 @@ export function GanttView({ workspaceId }: Props) {
                                   {isOverdue && <span className="text-[11px] font-semibold text-red-500">Overdue</span>}
                                 </div>
                               </div>
-                              <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0 font-medium", PRIORITY_COLOR[task.priority])}>
-                                {task.priority}
-                              </Badge>
                               {member && (
                                 <Avatar className="h-6 w-6 shrink-0">
                                   <AvatarImage src={member.profile.avatar_url ?? undefined} />
                                   <AvatarFallback className="text-[9px]">{getInitials(member.profile.full_name ?? "")}</AvatarFallback>
                                 </Avatar>
                               )}
+                              <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0 font-medium", PRIORITY_COLOR[task.priority])}>
+                                {task.priority}
+                              </Badge>
                             </div>
                           );
                         }
@@ -328,7 +328,7 @@ export function GanttView({ workspaceId }: Props) {
                                 {isOverdue && <span className="text-[11px] font-semibold text-red-500">Overdue</span>}
                               </div>
                             </div>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-orange-500/50 text-orange-600 dark:text-orange-400">
+                            <Badge className="text-[10px] px-1.5 py-0 shrink-0 font-medium bg-orange-500 text-white">
                               Review
                             </Badge>
                           </div>

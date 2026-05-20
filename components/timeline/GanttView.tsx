@@ -179,18 +179,18 @@ export function GanttView({ workspaceId }: Props) {
   return (
     <div className="space-y-6">
       {/* ── Legend ── */}
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
         {Object.entries(TASK_STATUS_COLOR).map(([s, c]) => (
           <div key={s} className="flex items-center gap-1.5">
             <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
             <span>{TASK_STATUS_LABEL[s]}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            <span>Review</span>
           </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+          <span>Peer Review</span>
         </div>
+      </div>
 
       {/* ── Vertical timeline ── */}
       {dayGroups.length === 0 ? (
@@ -199,7 +199,7 @@ export function GanttView({ workspaceId }: Props) {
         </div>
       ) : (
         <div className="relative">
-          <div className="absolute left-[5.5rem] top-0 bottom-0 w-px bg-border" />
+          <div className="absolute left-12 sm:left-[5.5rem] top-0 bottom-0 w-px bg-border" />
 
           <div className="space-y-0">
             {dayGroups.map((group) => {
@@ -218,18 +218,18 @@ export function GanttView({ workspaceId }: Props) {
                 <div key={group.key} ref={group.isToday ? todayRef : undefined} className="relative flex">
                   {/* Date label */}
                   <div className={cn(
-                    "w-[5.5rem] shrink-0 flex flex-col items-end pr-4 pt-3 pb-6",
+                    "w-12 sm:w-[5.5rem] shrink-0 flex flex-col items-end pr-2 sm:pr-4 pt-3 pb-6",
                     group.isToday && "text-primary",
                     hasOverdue && !group.isToday && "text-red-500",
                     !group.isToday && !hasOverdue && "text-muted-foreground",
                   )}>
-                    <span className="text-[11px] font-semibold uppercase tracking-wider">{weekday}</span>
-                    <span className={cn("text-xs font-medium", group.isToday && "font-bold")}>{dayNum}</span>
-                    {group.items.length > 0 && <span className="text-[10px] mt-0.5">{yearStr}</span>}
+                    <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider">{weekday}</span>
+                    <span className={cn("text-[10px] sm:text-xs font-medium", group.isToday && "font-bold")}>{dayNum}</span>
+                    {group.items.length > 0 && <span className="text-[9px] sm:text-[10px] mt-0.5">{yearStr}</span>}
                   </div>
 
                   {/* Dot */}
-                  <div className="absolute left-[5.5rem] -translate-x-1/2 pt-3.5 z-10">
+                  <div className="absolute left-12 sm:left-[5.5rem] -translate-x-1/2 pt-3.5 z-10">
                     <div className={cn(
                       "rounded-full border-2 border-background transition-all",
                       group.isToday ? "h-4 w-4 bg-primary shadow-[0_0_0_3px_rgb(59_130_246_/_0.2)]" : "h-3 w-3",
@@ -240,7 +240,7 @@ export function GanttView({ workspaceId }: Props) {
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 pl-6 pt-2 pb-6">
+                  <div className="flex-1 pl-4 sm:pl-6 pt-2 pb-6">
                     {group.isToday && (
                       <div className="mb-2">
                         <Badge className="text-xs bg-primary text-primary-foreground">Today</Badge>
@@ -312,11 +312,11 @@ export function GanttView({ workspaceId }: Props) {
                             className={cn(
                               "flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer",
                               "hover:shadow-sm transition-all duration-150 bg-card hover:bg-accent/30",
-                              isOverdue ? "border-red-500/40 bg-red-500/5" : "border-amber-500/30",
+                              isOverdue ? "border-red-500/40 bg-red-500/5" : "border-orange-500/30",
                             )}
                           >
-                            <div className="w-1 self-stretch rounded-full shrink-0 bg-amber-500" />
-                            <ClipboardCheck className="h-4 w-4 text-amber-500 shrink-0" />
+                            <div className="w-1 self-stretch rounded-full shrink-0 bg-orange-500" />
+                            <ClipboardCheck className="h-4 w-4 text-orange-500 shrink-0" />
                             <div className="flex-1 min-w-0">
                               <span className={cn("text-sm font-medium truncate block", isOverdue && "text-red-400")}>
                                 {review.title}
@@ -328,7 +328,7 @@ export function GanttView({ workspaceId }: Props) {
                                 {isOverdue && <span className="text-[11px] font-semibold text-red-500">Overdue</span>}
                               </div>
                             </div>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 border-orange-500/50 text-orange-600 dark:text-orange-400">
                               Review
                             </Badge>
                           </div>

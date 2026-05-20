@@ -16,13 +16,13 @@ export default function TimelinePage({ params }: Props) {
   const [view, setView] = useState<View>("timeline");
 
   return (
-    <div className="p-6 max-w-7xl mx-auto w-full">
-      <div className="flex items-start justify-between mb-6 fade-in stagger-1">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6 fade-in stagger-1">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-xl sm:text-2xl font-bold">
             {view === "timeline" ? "Project Timeline" : "Calendar"}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {view === "timeline"
               ? "Tasks & reviews by deadline — day by day"
               : "Monthly overview of all deadlines"}
@@ -30,7 +30,7 @@ export default function TimelinePage({ params }: Props) {
         </div>
 
         {/* View toggle */}
-        <div className="flex items-center gap-px rounded-lg border border-border p-1 bg-muted/30 shrink-0">
+        <div className="flex items-center gap-px rounded-lg border border-border p-1 bg-muted/30 shrink-0 self-start">
           <button
             onClick={() => setView("timeline")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${

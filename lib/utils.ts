@@ -67,20 +67,20 @@ export function formatBytes(bytes: number): string {
 
 export function priorityColor(priority: string): string {
   const map: Record<string, string> = {
-    low: "text-slate-500 bg-slate-100 dark:bg-slate-800",
-    medium: "text-blue-600 bg-blue-50 dark:bg-blue-950",
-    high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
-    urgent: "text-red-600 bg-red-50 dark:bg-red-950",
+    low: "text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",
+    medium: "text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-300",
+    high: "text-orange-600 bg-orange-50 dark:bg-orange-950 dark:text-orange-300",
+    urgent: "text-red-600 bg-red-50 dark:bg-red-950 dark:text-red-300",
   };
   return map[priority] ?? map.medium;
 }
 
 export function statusColor(status: string): string {
   const map: Record<string, string> = {
-    backlog: "text-slate-600 bg-slate-100 dark:bg-slate-800",
-    in_progress: "text-blue-600 bg-blue-50 dark:bg-blue-950",
-    review: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
-    done: "text-green-600 bg-green-50 dark:bg-green-950",
+    backlog: "text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",
+    in_progress: "text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-300",
+    review: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950 dark:text-yellow-300",
+    done: "text-green-600 bg-green-50 dark:bg-green-950 dark:text-green-300",
   };
   return map[status] ?? map.backlog;
 }

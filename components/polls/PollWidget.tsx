@@ -114,7 +114,7 @@ export function PollWidget({ poll, currentUserId }: Props) {
                 isSelected && !hasVoted
                   ? "border-primary bg-primary/5"
                   : hasVoted && isMyChoice
-                  ? "border-green-500 bg-green-50 dark:bg-green-950"
+                  ? "border-green-500 bg-green-50 dark:bg-green-950 dark:text-green-100"
                   : "border-border hover:border-primary/40 hover:bg-muted/30"
               } ${(hasVoted || expired) ? "cursor-default" : "cursor-pointer"}`}
             >

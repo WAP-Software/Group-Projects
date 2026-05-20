@@ -196,7 +196,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
               activityItems.map((item, i) => (
                 <Link key={i} href={item.href}>
                   <div className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className={`mt-0.5 h-5 w-5 rounded-md flex items-center justify-center shrink-0 ${item.type === "task" ? "bg-violet-100 text-violet-600" : "bg-amber-100 text-amber-600"}`}>
+                    <div className={`mt-0.5 h-5 w-5 rounded-md flex items-center justify-center shrink-0 ${item.type === "task" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300" : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"}`}>
                       {item.type === "task" ? <Kanban className="h-3 w-3" /> : <File className="h-3 w-3" />}
                     </div>
                     <div className="flex-1 min-w-0">

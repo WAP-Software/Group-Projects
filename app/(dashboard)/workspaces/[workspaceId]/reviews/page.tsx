@@ -17,10 +17,10 @@ import { toast } from "sonner";
 import type { Review, FileRecord } from "@/types/database";
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-700 dark:bg-slate-800",
-  in_review: "bg-blue-50 text-blue-700 dark:bg-blue-950",
-  changes_requested: "bg-orange-50 text-orange-700 dark:bg-orange-950",
-  approved: "bg-green-50 text-green-700 dark:bg-green-950",
+  pending: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  in_review: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  changes_requested: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  approved: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
 };
 
 interface Props {

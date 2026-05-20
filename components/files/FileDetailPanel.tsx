@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Download, X, Send, ExternalLink, File, FileText,
   ImageIcon, Table2, Presentation, Kanban, Calendar, Flag,
-  Maximize2, Pin, PinOff, Tag, Plus, Link2, Upload,
+  Eye, Pin, PinOff, Tag, Plus, Link2, Upload,
   ClipboardCheck, History, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -88,7 +88,7 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   const [loading, setLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [pdfFullscreen, setPdfFullscreen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [csvData, setCsvData] = useState<string[][]>([]);
   const [editingTags, setEditingTags] = useState(false);
   const [tagInput, setTagInput] = useState("");
@@ -287,25 +287,26 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                   )}
                 </div>
               </div>
-              {file.external_url ? (
-                <a
-                  href={file.external_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
-                  aria-label="Open link"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              ) : (
-                <button
-                  onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download failed"))}
-                  className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
-                  aria-label="Download"
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {(previewType !== "none" || file.external_url) && (
+                  <button
+                    onClick={() => file.external_url ? window.open(file.external_url!, "_blank") : setPreviewOpen(true)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
+                    aria-label="Preview"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                )}
+                {!file.external_url && (
+                  <button
+                    onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => toast.error("Download failed"))}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted transition-colors"
+                    aria-label="Download"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Tags */}
@@ -348,86 +349,6 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
               )}
             </div>
           </div>
-
-          {/* Preview */}
-          {!file.external_url && previewType !== "none" && previewType !== "csv" && (
-            <div className="border-b border-border bg-muted/30 flex items-center justify-center relative" style={{ height: 220 }}>
-              {previewType === "image" && fileUrl && (
-                <img src={fileUrl} alt={file.name} className="max-h-full max-w-full object-contain p-2" />
-              )}
-              {previewType === "pdf" && fileUrl && (
-                <>
-                  <iframe src={fileUrl} className="w-full h-full" title={file.name} />
-                  <button
-                    onClick={() => setPdfFullscreen(true)}
-                    className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-md bg-background/80 border border-border hover:bg-background transition-colors"
-                    aria-label="Fullscreen"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* CSV preview */}
-          {previewType === "csv" && csvData.length > 0 && (
-            <div className="border-b border-border bg-muted/10 overflow-auto" style={{ maxHeight: 220 }}>
-              <table className="text-xs w-full">
-                <thead className="bg-muted/40 sticky top-0">
-                  <tr>
-                    {(csvData[0] ?? []).map((cell, i) => (
-                      <th key={i} className="px-2 py-1 text-left font-medium border-r border-border/40 last:border-0 whitespace-nowrap">{cell}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {csvData.slice(1, 20).map((row, ri) => (
-                    <tr key={ri} className="border-t border-border/20 hover:bg-muted/20">
-                      {row.map((cell, ci) => (
-                        <td key={ci} className="px-2 py-1 border-r border-border/20 last:border-0 whitespace-nowrap max-w-[120px] truncate">{cell}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {csvData.length > 21 && (
-                <p className="text-xs text-muted-foreground text-center py-1">+ {csvData.length - 21} weitere Zeilen</p>
-              )}
-            </div>
-          )}
-
-          {file.external_url && (
-            <div className="border-b border-border bg-muted/20 flex flex-col items-center justify-center gap-2 py-6">
-              <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
-                <Link2 className="h-5 w-5 text-blue-500" />
-              </div>
-              <p className="text-sm text-muted-foreground">External link</p>
-              <a
-                href={file.external_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-primary hover:underline max-w-[280px] truncate"
-              >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                {file.external_url}
-              </a>
-            </div>
-          )}
-
-          {!file.external_url && previewType === "none" && (
-            <div className="border-b border-border bg-muted/20 flex flex-col items-center justify-center gap-2 py-6">
-              <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
-                {fileTypeIcon(file.mime_type)}
-              </div>
-              <p className="text-sm text-muted-foreground">No preview available</p>
-              {fileUrl && (
-                <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-primary hover:underline">
-                  <ExternalLink className="h-3.5 w-3.5" /> Open file
-                </a>
-              )}
-            </div>
-          )}
 
           {/* Tabs */}
           <Tabs defaultValue="comments" className="flex flex-col flex-1 overflow-hidden">
@@ -658,25 +579,73 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
         </SheetContent>
       </Sheet>
 
-      {/* PDF Fullscreen */}
-      <Dialog open={pdfFullscreen} onOpenChange={setPdfFullscreen}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 flex flex-col gap-0">
+      {/* Lightbox preview */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className={cn(
+          "p-0 flex flex-col gap-0",
+          previewType === "csv" ? "max-w-[90vw] w-[90vw] h-[80vh]" : "max-w-[95vw] w-[95vw] h-[90vh]",
+        )}>
           <VisuallyHidden><DialogTitle>{file.name}</DialogTitle></VisuallyHidden>
-          <VisuallyHidden><DialogDescription>PDF preview</DialogDescription></VisuallyHidden>
+          <VisuallyHidden><DialogDescription>File preview</DialogDescription></VisuallyHidden>
           <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
-            <span className="text-sm font-medium truncate">{file.name}</span>
-            <div className="flex items-center gap-2">
-              {fileUrl && (
+            <div className="flex items-center gap-2 min-w-0">
+              {fileTypeIcon(file.mime_type)}
+              <span className="text-sm font-medium truncate">{file.name}</span>
+              {file.version > 1 && <Badge variant="secondary" className="text-xs shrink-0">v{file.version}</Badge>}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {fileUrl && previewType !== "none" && (
                 <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => downloadFile(file.r2_key, file.original_name).catch(() => {})}>
                   <Download className="h-3.5 w-3.5" /> Download
                 </Button>
               )}
-              <button onClick={() => setPdfFullscreen(false)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors">
+              <button onClick={() => setPreviewOpen(false)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
           </div>
-          {fileUrl && <iframe src={fileUrl} className="flex-1 w-full" title={file.name} />}
+
+          {/* Image */}
+          {previewType === "image" && fileUrl && (
+            <div className="flex-1 flex items-center justify-center bg-muted/20 overflow-hidden">
+              <img src={fileUrl} alt={file.name} className="max-h-full max-w-full object-contain p-4" />
+            </div>
+          )}
+
+          {/* PDF */}
+          {previewType === "pdf" && fileUrl && (
+            <iframe src={fileUrl} className="flex-1 w-full" title={file.name} />
+          )}
+
+          {/* CSV / spreadsheet */}
+          {previewType === "csv" && (
+            <div className="flex-1 overflow-auto">
+              {csvData.length > 0 ? (
+                <table className="text-xs w-full">
+                  <thead className="bg-muted/40 sticky top-0 z-10">
+                    <tr>
+                      {(csvData[0] ?? []).map((cell, i) => (
+                        <th key={i} className="px-3 py-2 text-left font-semibold border-r border-border/40 last:border-0 whitespace-nowrap">{cell}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvData.slice(1).map((row, ri) => (
+                      <tr key={ri} className="border-t border-border/20 hover:bg-muted/20">
+                        {row.map((cell, ci) => (
+                          <td key={ci} className="px-3 py-1.5 border-r border-border/20 last:border-0 whitespace-nowrap">{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  Loading preview…
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

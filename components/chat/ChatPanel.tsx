@@ -59,7 +59,7 @@ export function ChatPanel({ workspaceId }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] overflow-hidden">
+    <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden">
       {/* Channel list */}
       <div className="w-48 shrink-0 border-r border-border bg-sidebar/50 flex flex-col">
         <div className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">

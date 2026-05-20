@@ -1,14 +1,16 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Flag } from "lucide-react";
-import type { Task, Review, Poll } from "@/types/database";
+import { CalendarDays, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { TaskDetailPanel } from "@/components/kanban/TaskDetailPanel";
+import type { Task, Profile, WorkspaceMember } from "@/types/database";
 
 interface CalEvent {
   id: string;
@@ -18,26 +20,38 @@ interface CalEvent {
   priority?: string;
 }
 
+type Member = { user_id: string; role: string; profile: Profile };
+
 interface Props {
   params: Promise<{ workspaceId: string }>;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const TYPE_STYLE: Record<string, string> = {
+  task: "bg-blue-500",
+  review: "bg-amber-500",
+  poll: "bg-violet-500",
+};
+
 export default function CalendarPage({ params }: Props) {
   const { workspaceId } = use(params);
   const supabase = createClient();
+  const router = useRouter();
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [tasksRes, reviewsRes, pollsRes] = await Promise.all([
+      const [tasksRes, reviewsRes, pollsRes, membersRes] = await Promise.all([
         supabase.from("tasks").select("id, title, due_date, priority").eq("workspace_id", workspaceId).not("due_date", "is", null),
         supabase.from("reviews").select("id, title, due_date").eq("workspace_id", workspaceId).not("due_date", "is", null),
         supabase.from("polls").select("id, question, expires_at").eq("workspace_id", workspaceId).not("expires_at", "is", null),
+        supabase.from("workspace_members").select("*, profile:profiles(*)").eq("workspace_id", workspaceId),
       ]);
 
       const all: CalEvent[] = [
@@ -46,10 +60,11 @@ export default function CalendarPage({ params }: Props) {
         ...(pollsRes.data ?? []).map((p) => ({ id: p.id, title: p.question, date: p.expires_at!, type: "poll" as const })),
       ];
       setEvents(all.sort((a, b) => a.date.localeCompare(b.date)));
+      setMembers((membersRes.data ?? []) as any);
       setLoading(false);
     }
     load();
-  }, [workspaceId, supabase]);
+  }, [workspaceId]);
 
   async function exportIcs() {
     const res = await fetch(`/api/calendar/export?workspaceId=${workspaceId}`);
@@ -63,6 +78,27 @@ export default function CalendarPage({ params }: Props) {
     URL.revokeObjectURL(url);
   }
 
+  async function handleUpdateTask(id: string, data: Partial<Task>): Promise<any> {
+    const { error } = await supabase.from("tasks").update(data as any).eq("id", id);
+    return error;
+  }
+
+  async function handleDeleteTask(id: string): Promise<void> {
+    await supabase.from("tasks").delete().eq("id", id);
+    setEvents((evts) => evts.filter((e) => !(e.id === id && e.type === "task")));
+    setSelectedTaskId(null);
+  }
+
+  function handleEventClick(ev: CalEvent) {
+    if (ev.type === "task") {
+      setSelectedTaskId(ev.id);
+    } else if (ev.type === "review") {
+      router.push(`/workspaces/${workspaceId}/reviews`);
+    } else if (ev.type === "poll") {
+      router.push(`/workspaces/${workspaceId}/polls`);
+    }
+  }
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
@@ -73,7 +109,6 @@ export default function CalendarPage({ params }: Props) {
     ...Array.from({ length: firstDay }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
-
   while (cells.length % 7 !== 0) cells.push(null);
 
   function getEventsForDay(day: number) {
@@ -81,18 +116,12 @@ export default function CalendarPage({ params }: Props) {
     return events.filter((e) => e.date.startsWith(dateStr));
   }
 
-  const TYPE_STYLE: Record<string, string> = {
-    task: "bg-blue-500",
-    review: "bg-amber-500",
-    poll: "bg-violet-500",
-  };
-
   return (
     <div className="p-6 max-w-7xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6 fade-in stagger-1">
         <div>
           <h1 className="text-2xl font-bold">Calendar</h1>
-          <p className="text-sm text-muted-foreground mt-1">Deadlines, reviews, and polls in one view</p>
+          <p className="text-sm text-muted-foreground mt-1">Deadlines, reviews, and polls — click tasks to open detail</p>
         </div>
         <Button variant="outline" onClick={exportIcs} className="gap-2 pressable">
           <Download className="h-4 w-4" /> Export .ics
@@ -109,28 +138,16 @@ export default function CalendarPage({ params }: Props) {
               {currentDate.toLocaleString("default", { month: "long", year: "numeric" })}
             </h2>
             <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="pressable"
-                onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
-              >
+              <Button variant="ghost" size="icon" className="pressable"
+                onClick={() => setCurrentDate(new Date(year, month - 1, 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="pressable"
-                onClick={() => setCurrentDate(new Date())}
-              >
+              <Button variant="ghost" size="sm" className="pressable"
+                onClick={() => setCurrentDate(new Date())}>
                 Today
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="pressable"
-                onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
-              >
+              <Button variant="ghost" size="icon" className="pressable"
+                onClick={() => setCurrentDate(new Date(year, month + 1, 1))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -144,20 +161,17 @@ export default function CalendarPage({ params }: Props) {
                 <span className="text-muted-foreground capitalize">{type}</span>
               </div>
             ))}
+            <span className="text-muted-foreground">· Click task chips to open detail</span>
           </div>
 
           {/* Calendar grid */}
           <Card className="border-border/50 overflow-hidden">
             <CardContent className="p-0">
-              {/* Weekday headers */}
               <div className="grid grid-cols-7 border-b border-border bg-muted/30">
                 {DAYS.map((d) => (
-                  <div key={d} className="py-2 text-center text-xs font-medium text-muted-foreground">
-                    {d}
-                  </div>
+                  <div key={d} className="py-2 text-center text-xs font-medium text-muted-foreground">{d}</div>
                 ))}
               </div>
-              {/* Day cells */}
               <div className="grid grid-cols-7">
                 {cells.map((day, idx) => {
                   const isToday =
@@ -172,21 +186,23 @@ export default function CalendarPage({ params }: Props) {
                     >
                       {day && (
                         <>
-                          <span
-                            className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                              isToday
-                                ? "bg-primary text-primary-foreground"
-                                : "text-foreground"
-                            }`}
-                          >
+                          <span className={cn(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
+                            isToday ? "bg-primary text-primary-foreground" : "text-foreground",
+                          )}>
                             {day}
                           </span>
                           <div className="mt-1 space-y-0.5">
                             {dayEvents.slice(0, 3).map((ev) => (
                               <div
                                 key={ev.id}
-                                className={`${TYPE_STYLE[ev.type]} text-white text-[10px] px-1.5 py-0.5 rounded truncate`}
+                                className={cn(
+                                  `${TYPE_STYLE[ev.type]} text-white text-[10px] px-1.5 py-0.5 rounded truncate`,
+                                  ev.type === "task" && "cursor-pointer hover:opacity-80 active:opacity-60 transition-opacity",
+                                  ev.type !== "task" && "cursor-pointer hover:opacity-80",
+                                )}
                                 title={ev.title}
+                                onClick={() => handleEventClick(ev)}
                               >
                                 {ev.title}
                               </div>
@@ -214,7 +230,8 @@ export default function CalendarPage({ params }: Props) {
                 .map((ev) => (
                   <div
                     key={ev.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => handleEventClick(ev)}
                   >
                     <div className={`h-3 w-3 rounded-full shrink-0 ${TYPE_STYLE[ev.type]}`} />
                     <span className="text-sm font-medium flex-1 truncate">{ev.title}</span>
@@ -229,6 +246,16 @@ export default function CalendarPage({ params }: Props) {
           </div>
         </div>
       )}
+
+      <TaskDetailPanel
+        taskId={selectedTaskId}
+        workspaceId={workspaceId}
+        members={members}
+        open={selectedTaskId !== null}
+        onClose={() => setSelectedTaskId(null)}
+        onUpdate={handleUpdateTask}
+        onDelete={handleDeleteTask}
+      />
     </div>
   );
 }

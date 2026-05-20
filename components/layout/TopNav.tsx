@@ -25,6 +25,7 @@ import {
   Bell,
   Moon,
   Sun,
+  Search,
   LayoutDashboard,
   Kanban,
   GanttChartSquare,
@@ -180,6 +181,26 @@ export function TopNav({ profile }: TopNavProps) {
       </Link>
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Search trigger — pill on desktop, icon on mobile */}
+        <button
+          onClick={() => document.dispatchEvent(new CustomEvent("openSearch"))}
+          className="hidden md:flex items-center gap-2 h-8 px-3 rounded-md border border-border/60 bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 transition-colors pressable"
+          aria-label="Search (⌘K)"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span>Search…</span>
+          <kbd className="ml-1 text-[10px] bg-background border border-border rounded px-1 py-0.5 font-mono leading-none">⌘K</kbd>
+        </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="pressable md:hidden"
+          aria-label="Search"
+          onClick={() => document.dispatchEvent(new CustomEvent("openSearch"))}
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"

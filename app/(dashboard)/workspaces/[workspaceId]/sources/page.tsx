@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, ExternalLink, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpen, ExternalLink, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Source } from "@/types/database";
 
@@ -38,10 +38,29 @@ export default function SourcesPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editSource, setEditSource] = useState<Source | null>(null);
   const [form, setForm] = useState({
     title: "", url: "", source_type: "url" as Source["source_type"],
     notes: "", tags: "",
   });
+
+  function openEdit(source: Source) {
+    setEditSource(source);
+    setForm({
+      title: source.title,
+      url: source.url ?? "",
+      source_type: source.source_type,
+      notes: source.notes ?? "",
+      tags: (source.tags ?? []).join(", "),
+    });
+    setDialogOpen(true);
+  }
+
+  function openCreate() {
+    setEditSource(null);
+    setForm({ title: "", url: "", source_type: "url", notes: "", tags: "" });
+    setDialogOpen(true);
+  }
 
   useEffect(() => { loadSources(); }, [workspaceId]);
 
@@ -58,19 +77,26 @@ export default function SourcesPage({ params }: Props) {
 
   async function handleSave() {
     if (!form.title.trim()) { toast.error("Title required"); return; }
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("sources").insert({
-      workspace_id: workspaceId,
+    const payload = {
       title: form.title,
       url: form.url || null,
       source_type: form.source_type,
       notes: form.notes || null,
       tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      added_by: user?.id,
-    });
-    if (error) { toast.error("Failed to add source"); return; }
-    toast.success("Source added!");
+    };
+
+    if (editSource) {
+      const { error } = await supabase.from("sources").update(payload).eq("id", editSource.id);
+      if (error) { toast.error("Failed to update source"); return; }
+      toast.success("Source updated!");
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("sources").insert({ ...payload, workspace_id: workspaceId, added_by: user?.id });
+      if (error) { toast.error("Failed to add source"); return; }
+      toast.success("Source added!");
+    }
     setDialogOpen(false);
+    setEditSource(null);
     setForm({ title: "", url: "", source_type: "url", notes: "", tags: "" });
     loadSources();
   }
@@ -95,7 +121,7 @@ export default function SourcesPage({ params }: Props) {
           <h1 className="text-2xl font-bold">Source Library</h1>
           <p className="text-sm text-muted-foreground mt-1">Shared research sources and references</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-2 pressable">
+        <Button onClick={openCreate} className="gap-2 pressable">
           <Plus className="h-4 w-4" /> Add Source
         </Button>
       </div>
@@ -140,6 +166,14 @@ export default function SourcesPage({ params }: Props) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-7 w-7 pressable"
+                      onClick={() => openEdit(source)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-7 w-7 pressable text-destructive hover:text-destructive"
                       onClick={() => handleDelete(source.id)}
                     >
@@ -165,10 +199,10 @@ export default function SourcesPage({ params }: Props) {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditSource(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Source</DialogTitle>
+            <DialogTitle>{editSource ? "Edit Source" : "Add Source"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -201,8 +235,8 @@ export default function SourcesPage({ params }: Props) {
               <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="dcf, valuation, equity" className="h-10" />
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleSave} className="pressable">Add Source</Button>
+              <Button variant="ghost" onClick={() => { setDialogOpen(false); setEditSource(null); }}>Cancel</Button>
+              <Button onClick={handleSave} className="pressable">{editSource ? "Save Changes" : "Add Source"}</Button>
             </div>
           </div>
         </DialogContent>

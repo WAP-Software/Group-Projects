@@ -27,8 +27,18 @@ interface Props {
   params: Promise<{ workspaceId: string }>;
 }
 
+interface FeedbackRow {
+  id: string;
+  reviewer_id: string;
+  feedback: string | null;
+  rating: number | null;
+  status: string;
+  submitted_at: string | null;
+}
+
 interface ReviewWithFile extends Review {
   file?: { name: string } | null;
+  assignments?: FeedbackRow[];
 }
 
 export default function ReviewsPage({ params }: Props) {
@@ -51,7 +61,11 @@ export default function ReviewsPage({ params }: Props) {
   async function loadData() {
     setLoading(true);
     const [reviewsResult, filesResult] = await Promise.all([
-      supabase.from("reviews").select("*, file:files(name)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+      supabase
+        .from("reviews")
+        .select("*, file:files(name), assignments:review_assignments(*)")
+        .eq("workspace_id", workspaceId)
+        .order("created_at", { ascending: false }),
       supabase.from("files").select("id, name").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     ]);
     setReviews((reviewsResult.data as ReviewWithFile[]) ?? []);
@@ -94,6 +108,16 @@ export default function ReviewsPage({ params }: Props) {
     loadData();
   }
 
+  function renderStars(rating: number | null) {
+    const r = rating ?? 0;
+    return (
+      <span className="text-amber-500 text-sm tracking-tight">
+        {"★".repeat(r)}
+        <span className="text-muted-foreground/40">{"★".repeat(5 - r)}</span>
+      </span>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto w-full">
       <div className="flex items-center justify-between mb-6 fade-in stagger-1">
@@ -118,38 +142,64 @@ export default function ReviewsPage({ params }: Props) {
         </div>
       ) : (
         <div className="space-y-4 fade-in stagger-2">
-          {reviews.map((review) => (
-            <Card key={review.id} className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-base">{review.title}</CardTitle>
-                    {review.file && (
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <FileText className="h-3 w-3" /> {review.file.name}
-                      </p>
+          {reviews.map((review) => {
+            const feedbackRows = (review.assignments ?? []).filter((a) => a.feedback);
+            return (
+              <Card key={review.id} className="border-border/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base">{review.title}</CardTitle>
+                      {review.file && (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <FileText className="h-3 w-3" /> {review.file.name}
+                        </p>
+                      )}
+                    </div>
+                    <Badge className={`text-xs capitalize ${STATUS_COLORS[review.status]}`}>
+                      {review.status.replace("_", " ")}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">
+                      Submitted {formatDate(review.created_at)}
+                      {review.due_date && ` · Due ${formatDate(review.due_date)}`}
+                    </div>
+                    {review.submitted_by !== userId && review.status !== "approved" && (
+                      <Button size="sm" variant="outline" className="pressable" onClick={() => setFeedbackDialog(review.id)}>
+                        <Star className="h-3.5 w-3.5 mr-1" /> Give Feedback
+                      </Button>
                     )}
                   </div>
-                  <Badge className={`text-xs capitalize ${STATUS_COLORS[review.status]}`}>
-                    {review.status.replace("_", " ")}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">
-                    Submitted {formatDate(review.created_at)}
-                    {review.due_date && ` · Due ${formatDate(review.due_date)}`}
-                  </div>
-                  {review.submitted_by !== userId && review.status !== "approved" && (
-                    <Button size="sm" variant="outline" className="pressable" onClick={() => setFeedbackDialog(review.id)}>
-                      <Star className="h-3.5 w-3.5 mr-1" /> Give Feedback
-                    </Button>
+
+                  {/* Submitted feedback */}
+                  {feedbackRows.length > 0 && (
+                    <div className="pt-3 border-t border-border/50 space-y-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Feedback ({feedbackRows.length})
+                      </p>
+                      {feedbackRows.map((a) => (
+                        <div key={a.id} className="space-y-1 p-3 rounded-lg bg-muted/40">
+                          <div className="flex items-center gap-2">
+                            {renderStars(a.rating)}
+                            <span className="text-xs text-muted-foreground">({a.rating}/5)</span>
+                            {a.submitted_at && (
+                              <span className="text-xs text-muted-foreground ml-auto">
+                                {formatDate(a.submitted_at)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-foreground/80 whitespace-pre-wrap">{a.feedback}</p>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

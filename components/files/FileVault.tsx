@@ -56,7 +56,14 @@ export function FileVault({ workspaceId }: Props) {
     setLoading(false);
   }, [workspaceId]);
 
-  useEffect(() => { loadFiles(); }, [loadFiles]);
+  useEffect(() => {
+    loadFiles();
+    const sub = supabase
+      .channel(`files:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "files", filter: `workspace_id=eq.${workspaceId}` }, loadFiles)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [loadFiles, workspaceId]);
 
   async function doUpload(file: File) {
     const { data: { user }, error: authErr } = await supabase.auth.getUser();

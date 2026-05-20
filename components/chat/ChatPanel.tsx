@@ -21,6 +21,7 @@ export function ChatPanel({ workspaceId }: Props) {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [profile, setProfile] = useState<{ id: string; full_name: string | null } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, loading, hasMore, loadMore, addOptimistic } = useRealtimeMessages(activeChannel?.id ?? null);
 
@@ -44,7 +45,8 @@ export function ChatPanel({ workspaceId }: Props) {
   }, [workspaceId, supabase]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   async function handleSend(content: string) {
@@ -108,7 +110,7 @@ export function ChatPanel({ workspaceId }: Props) {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4">
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4">
               {hasMore && (
                 <div className="flex justify-center py-3">
                   <Button variant="ghost" size="sm" onClick={loadMore} className="text-xs text-muted-foreground">

@@ -38,6 +38,12 @@ export default function PollsPage({ params }: Props) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => { if (user) setUserId(user.id); });
     loadPolls();
+    const sub = supabase
+      .channel(`polls:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "polls", filter: `workspace_id=eq.${workspaceId}` }, loadPolls)
+      .on("postgres_changes", { event: "*", schema: "public", table: "poll_votes" }, loadPolls)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
   async function loadPolls() {

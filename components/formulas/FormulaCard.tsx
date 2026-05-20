@@ -67,7 +67,12 @@ export function FormulaCard({ formula, onEdit, onDelete, editable = false }: Pro
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="rounded-lg bg-muted/50 p-3 overflow-x-auto">
-          <BlockMath math={formula.latex} />
+          <BlockMath
+            math={formula.latex}
+            renderError={(err) => (
+              <code className="text-xs text-destructive font-mono break-all">{formula.latex}</code>
+            )}
+          />
         </div>
         {formula.description && (
           <p className="text-xs text-muted-foreground leading-relaxed">{formula.description}</p>

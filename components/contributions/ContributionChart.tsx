@@ -16,7 +16,6 @@ export type ComputedContribution = {
   tasks_completed: number;
   tasks_created: number;
   files_uploaded: number;
-  messages_sent: number;
 };
 
 const RANK = ["🥇", "🥈", "🥉"];
@@ -27,7 +26,7 @@ interface Props {
 
 export function ContributionChart({ contributions }: Props) {
   function score(c: ComputedContribution) {
-    return c.tasks_completed * 3 + c.tasks_created + c.files_uploaded * 2 + Math.floor(c.messages_sent / 5);
+    return c.tasks_completed * 3 + c.tasks_created + c.files_uploaded * 2;
   }
 
   const sorted = [...contributions].sort((a, b) => score(b) - score(a));
@@ -37,11 +36,10 @@ export function ContributionChart({ contributions }: Props) {
     "Tasks done": c.tasks_completed,
     "Tasks created": c.tasks_created,
     "Files": c.files_uploaded,
-    "Messages": c.messages_sent,
   }));
 
   const isEmpty = contributions.every(
-    (c) => c.tasks_completed === 0 && c.tasks_created === 0 && c.files_uploaded === 0 && c.messages_sent === 0,
+    (c) => c.tasks_completed === 0 && c.tasks_created === 0 && c.files_uploaded === 0,
   );
 
   return (
@@ -68,12 +66,11 @@ export function ContributionChart({ contributions }: Props) {
                   <p className="text-xs text-muted-foreground">{score(c)} pts</p>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2 mt-3">
+              <div className="grid grid-cols-3 gap-2 mt-3">
                 {[
                   { label: "Done", value: c.tasks_completed, color: "text-green-600" },
                   { label: "Created", value: c.tasks_created, color: "text-blue-600" },
                   { label: "Files", value: c.files_uploaded, color: "text-violet-600" },
-                  { label: "Msgs", value: c.messages_sent, color: "text-pink-500" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="text-center">
                     <p className={`text-lg font-bold tabular-nums ${color}`}>{value}</p>
@@ -115,7 +112,6 @@ export function ContributionChart({ contributions }: Props) {
                   <Bar dataKey="Tasks done" fill="#22c55e" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="Tasks created" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="Files" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Messages" fill="#ec4899" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

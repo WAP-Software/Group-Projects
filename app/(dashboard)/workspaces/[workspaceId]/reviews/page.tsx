@@ -56,6 +56,12 @@ export default function ReviewsPage({ params }: Props) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => { if (user) setUserId(user.id); });
     loadData();
+    const sub = supabase
+      .channel(`reviews:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `workspace_id=eq.${workspaceId}` }, loadData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "review_assignments" }, loadData)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
   async function loadData() {

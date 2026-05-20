@@ -64,6 +64,13 @@ export default function CalendarPage({ params }: Props) {
       setLoading(false);
     }
     load();
+    const sub = supabase
+      .channel(`calendar:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `workspace_id=eq.${workspaceId}` }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews", filter: `workspace_id=eq.${workspaceId}` }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "polls", filter: `workspace_id=eq.${workspaceId}` }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
   }, [workspaceId]);
 
   async function exportIcs() {

@@ -17,7 +17,7 @@ import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import type { Formula } from "@/types/database";
 
-const CATEGORIES = ["All", "DCF", "LBO", "WACC", "Options", "Derivatives", "Statistics", "Allgemein"];
+const CATEGORIES = ["All", "DCF", "LBO", "WACC", "Options", "Derivatives", "Statistics", "General"];
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
@@ -33,10 +33,17 @@ export default function FormulasPage({ params }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editFormula, setEditFormula] = useState<Formula | null>(null);
   const [form, setForm] = useState({
-    title: "", latex: "", description: "", category: "Allgemein", tags: "",
+    title: "", latex: "", description: "", category: "General", tags: "",
   });
 
-  useEffect(() => { loadFormulas(); }, [workspaceId]);
+  useEffect(() => {
+    loadFormulas();
+    const sub = supabase
+      .channel(`formulas:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "formulas", filter: `workspace_id=eq.${workspaceId}` }, loadFormulas)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [workspaceId]);
 
   async function loadFormulas() {
     setLoading(true);
@@ -52,7 +59,7 @@ export default function FormulasPage({ params }: Props) {
 
   function openCreate() {
     setEditFormula(null);
-    setForm({ title: "", latex: "", description: "", category: "Allgemein", tags: "" });
+    setForm({ title: "", latex: "", description: "", category: "General", tags: "" });
     setDialogOpen(true);
   }
 
@@ -169,7 +176,12 @@ export default function FormulasPage({ params }: Props) {
               />
               {form.latex && (
                 <div className="rounded-lg bg-muted/50 p-3 overflow-x-auto">
-                  <BlockMath math={form.latex} />
+                  <BlockMath
+                    math={form.latex}
+                    renderError={() => (
+                      <span className="text-xs text-destructive">Invalid LaTeX syntax</span>
+                    )}
+                  />
                 </div>
               )}
             </div>

@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, ExternalLink, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpen, Download, ExternalLink, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { Source } from "@/types/database";
 
@@ -62,7 +63,14 @@ export default function SourcesPage({ params }: Props) {
     setDialogOpen(true);
   }
 
-  useEffect(() => { loadSources(); }, [workspaceId]);
+  useEffect(() => {
+    loadSources();
+    const sub = supabase
+      .channel(`sources:${workspaceId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sources", filter: `workspace_id=eq.${workspaceId}` }, loadSources)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [workspaceId]);
 
   async function loadSources() {
     setLoading(true);
@@ -108,6 +116,56 @@ export default function SourcesPage({ params }: Props) {
     loadSources();
   }
 
+  function exportSources(format: "bibtex" | "apa" | "csv") {
+    const list = filtered.length > 0 ? filtered : sources;
+    let content = "";
+    let filename = "";
+    let mime = "text/plain";
+
+    if (format === "bibtex") {
+      const typeMap: Record<string, string> = {
+        book: "book", paper: "article", url: "misc", pdf: "techreport", news: "misc", other: "misc",
+      };
+      content = list.map((s, i) => {
+        const key = s.title.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "").slice(0, 30) + i;
+        const type = typeMap[s.source_type] ?? "misc";
+        const fields = [`  title = {${s.title}}`];
+        if (s.url) fields.push(`  url = {${s.url}}`);
+        if (s.notes) fields.push(`  note = {${s.notes.replace(/[{}]/g, "")}}`);
+        if (s.tags?.length) fields.push(`  keywords = {${s.tags.join(", ")}}`);
+        fields.push(`  year = {${new Date(s.created_at).getFullYear()}}`);
+        return `@${type}{${key},\n${fields.join(",\n")}\n}`;
+      }).join("\n\n");
+      filename = "sources.bib";
+    } else if (format === "apa") {
+      content = list.map((s) => {
+        const year = new Date(s.created_at).getFullYear();
+        let entry = `${s.title}. (${year}).`;
+        if (s.notes) entry += ` ${s.notes}.`;
+        if (s.url) entry += ` Retrieved from ${s.url}`;
+        return entry;
+      }).join("\n\n");
+      filename = "sources_apa.txt";
+    } else {
+      const header = "Title,Type,URL,Notes,Tags,Added\n";
+      const rows = list.map((s) =>
+        [s.title, s.source_type, s.url ?? "", s.notes ?? "", (s.tags ?? []).join("; "), s.created_at]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(",")
+      );
+      content = header + rows.join("\n");
+      filename = "sources.csv";
+      mime = "text/csv";
+    }
+
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${list.length} source${list.length !== 1 ? "s" : ""} as ${format.toUpperCase()}`);
+  }
+
   const filtered = sources.filter(
     (s) => !search || s.title.toLowerCase().includes(search.toLowerCase()) ||
       s.notes?.toLowerCase().includes(search.toLowerCase()) ||
@@ -121,9 +179,25 @@ export default function SourcesPage({ params }: Props) {
           <h1 className="text-2xl font-bold">Source Library</h1>
           <p className="text-sm text-muted-foreground mt-1">Shared research sources and references</p>
         </div>
-        <Button onClick={openCreate} className="gap-2 pressable">
-          <Plus className="h-4 w-4" /> Add Source
-        </Button>
+        <div className="flex gap-2">
+          {sources.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2 pressable">
+                  <Download className="h-4 w-4" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportSources("bibtex")}>BibTeX (.bib)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportSources("apa")}>APA (.txt)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportSources("csv")}>CSV (.csv)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <Button onClick={openCreate} className="gap-2 pressable">
+            <Plus className="h-4 w-4" /> Add Source
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm mb-6 fade-in stagger-2">

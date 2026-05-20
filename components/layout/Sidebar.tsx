@@ -15,7 +15,6 @@ import {
   ClipboardCheck,
   BarChart3,
   Vote,
-  Calendar,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
@@ -41,7 +40,6 @@ const WORKSPACE_LINKS = [
   { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
   { href: "/contributions", label: "Contributions", icon: BarChart3 },
   { href: "/polls", label: "Polls", icon: Vote },
-  { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BlockMath } from "react-katex";
+import katex from "katex";
 import "katex/dist/katex.min.css";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -175,14 +175,18 @@ export default function FormulasPage({ params }: Props) {
                 className="font-mono text-sm"
               />
               {form.latex && (
-                <div className="rounded-lg bg-muted/50 p-3 overflow-x-auto">
-                  <BlockMath
-                    math={form.latex}
-                    renderError={() => (
-                      <span className="text-xs text-destructive">Invalid LaTeX syntax</span>
-                    )}
-                  />
-                </div>
+                <div
+                  className="rounded-lg bg-muted/50 p-3 overflow-x-auto"
+                  dangerouslySetInnerHTML={{
+                    __html: (() => {
+                      try {
+                        return katex.renderToString(form.latex, { displayMode: true, throwOnError: true, output: "html" });
+                      } catch {
+                        return '<span class="text-xs text-destructive">Invalid LaTeX syntax</span>';
+                      }
+                    })(),
+                  }}
+                />
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">

@@ -178,19 +178,7 @@ export function GanttView({ workspaceId }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ── Legend ── */}
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
-        {Object.entries(TASK_STATUS_COLOR).map(([s, c]) => (
-          <div key={s} className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
-            <span>{TASK_STATUS_LABEL[s]}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-full bg-orange-500" />
-          <span>Peer Review</span>
-        </div>
-      </div>
+
 
       {/* ── Vertical timeline ── */}
       {dayGroups.length === 0 ? (

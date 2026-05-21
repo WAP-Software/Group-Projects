@@ -131,6 +131,8 @@ export interface FileRecord {
   is_pinned: boolean;
   deadline_date: string | null;
   external_url: string | null;
+  linked_formula_ids: string[];
+  linked_source_ids: string[];
   created_at: string;
 }
 

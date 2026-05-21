@@ -19,10 +19,10 @@ import {
   Download, X, Send, File, FileText,
   ImageIcon, Table2, Presentation, Kanban, Calendar, Flag,
   Eye, Tag, Plus, Link2, Upload,
-  ClipboardCheck, History, Clock,
+  ClipboardCheck, History, Clock, Calculator, BookOpen, Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FileRecord, Task, Profile, Review } from "@/types/database";
+import type { FileRecord, Task, Profile, Review, Formula, Source } from "@/types/database";
 import { priorityColor } from "@/lib/utils";
 import Papa from "papaparse";
 
@@ -87,6 +87,10 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [versions, setVersions] = useState<FileRecord[]>([]);
   const [linkedReviews, setLinkedReviews] = useState<Review[]>([]);
+  const [allFormulas, setAllFormulas] = useState<Formula[]>([]);
+  const [allSources, setAllSources] = useState<Source[]>([]);
+  const [linkedFormulaIds, setLinkedFormulaIds] = useState<string[]>([]);
+  const [linkedSourceIds, setLinkedSourceIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -109,13 +113,17 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
   }, [workspaceId]);
 
   useEffect(() => {
-    if (file) setTags(file.tags ?? []);
+    if (file) {
+      setTags(file.tags ?? []);
+      setLinkedFormulaIds(file.linked_formula_ids ?? []);
+      setLinkedSourceIds(file.linked_source_ids ?? []);
+    }
   }, [file?.id]);
 
   const load = useCallback(async () => {
     if (!file) return;
     setLoading(true);
-    const [commentsRes, tasksRes, versionsRes, reviewsRes] = await Promise.all([
+    const [commentsRes, tasksRes, versionsRes, reviewsRes, formulasRes, sourcesRes] = await Promise.all([
       supabase
         .from("file_comments")
         .select("*, profile:profiles(id, full_name, avatar_url, email)")
@@ -137,11 +145,15 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
         .eq("workspace_id", workspaceId)
         .or(`document_id.eq.${file.id},file_id.eq.${file.id}`)
         .order("created_at", { ascending: false }),
+      supabase.from("formulas").select("*").eq("workspace_id", workspaceId).order("title"),
+      supabase.from("sources").select("*").eq("workspace_id", workspaceId).order("title"),
     ]);
     setComments((commentsRes.data ?? []) as any);
     setLinkedTasks(((tasksRes.data ?? []).map((r: any) => r.task).filter(Boolean)) as LinkedTask[]);
     setVersions((versionsRes.data ?? []) as FileRecord[]);
     setLinkedReviews((reviewsRes.data ?? []) as Review[]);
+    setAllFormulas((formulasRes.data ?? []) as Formula[]);
+    setAllSources((sourcesRes.data ?? []) as Source[]);
 
     // Load CSV if applicable
     const previewType = canPreview(file.mime_type);
@@ -264,6 +276,26 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
     load();
   }
 
+  async function toggleFormulaLink(formulaId: string) {
+    if (!file) return;
+    const next = linkedFormulaIds.includes(formulaId)
+      ? linkedFormulaIds.filter((x) => x !== formulaId)
+      : [...linkedFormulaIds, formulaId];
+    await supabase.from("files").update({ linked_formula_ids: next } as any).eq("id", file.id);
+    setLinkedFormulaIds(next);
+    toast.success(next.includes(formulaId) ? "Formel verknüpft" : "Verknüpfung entfernt");
+  }
+
+  async function toggleSourceLink(sourceId: string) {
+    if (!file) return;
+    const next = linkedSourceIds.includes(sourceId)
+      ? linkedSourceIds.filter((x) => x !== sourceId)
+      : [...linkedSourceIds, sourceId];
+    await supabase.from("files").update({ linked_source_ids: next } as any).eq("id", file.id);
+    setLinkedSourceIds(next);
+    toast.success(next.includes(sourceId) ? "Quelle verknüpft" : "Verknüpfung entfernt");
+  }
+
   if (!file) return null;
 
   const fileUrl = file.r2_key ? getFileUrl(file.r2_key) : null;
@@ -377,9 +409,11 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
           <Tabs defaultValue="comments" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="rounded-none border-b border-border bg-transparent h-10 px-3 justify-start gap-0 shrink-0 overflow-x-auto">
               {[
-                { value: "comments", label: "Comments", count: tabCount.comments },
+                { value: "comments", label: "Kommentare", count: tabCount.comments },
                 { value: "tasks", label: "Tasks", count: tabCount.tasks },
-                { value: "versions", label: "Versions", count: tabCount.versions },
+                { value: "formulas", label: "Formeln", count: linkedFormulaIds.length },
+                { value: "sources", label: "Quellen", count: linkedSourceIds.length },
+                { value: "versions", label: "Versionen", count: tabCount.versions },
                 { value: "reviews", label: "Reviews", count: tabCount.reviews },
               ].map(({ value, label, count }) => (
                 <TabsTrigger
@@ -504,6 +538,74 @@ export function FileDetailPanel({ file, workspaceId, open, onClose, onRefresh }:
                       </div>
                     </div>
                   ))
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Formulas */}
+            <TabsContent value="formulas" className="flex-1 overflow-y-auto m-0">
+              <div className="p-5 space-y-2">
+                {allFormulas.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Calculator className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Keine Formeln im Workspace.</p>
+                  </div>
+                ) : (
+                  allFormulas.map((formula) => {
+                    const linked = linkedFormulaIds.includes(formula.id);
+                    return (
+                      <div key={formula.id} className={cn(
+                        "flex items-start gap-3 p-3 rounded-xl border transition-all",
+                        linked ? "border-primary/40 bg-primary/5" : "border-border/50 hover:bg-muted/20",
+                      )}>
+                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <Calculator className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{formula.title}</p>
+                          {formula.description && <p className="text-xs text-muted-foreground truncate">{formula.description}</p>}
+                          <p className="text-xs font-mono text-muted-foreground/60 truncate mt-0.5">{formula.latex}</p>
+                        </div>
+                        <Button size="sm" variant={linked ? "default" : "outline"} className="h-7 text-xs shrink-0 gap-1 pressable" onClick={() => toggleFormulaLink(formula.id)}>
+                          {linked ? <><Check className="h-3 w-3" /> Verknüpft</> : "Verknüpfen"}
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Sources */}
+            <TabsContent value="sources" className="flex-1 overflow-y-auto m-0">
+              <div className="p-5 space-y-2">
+                {allSources.length === 0 ? (
+                  <div className="text-center py-10">
+                    <BookOpen className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Keine Quellen im Workspace.</p>
+                  </div>
+                ) : (
+                  allSources.map((source) => {
+                    const linked = linkedSourceIds.includes(source.id);
+                    return (
+                      <div key={source.id} className={cn(
+                        "flex items-start gap-3 p-3 rounded-xl border transition-all",
+                        linked ? "border-primary/40 bg-primary/5" : "border-border/50 hover:bg-muted/20",
+                      )}>
+                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <BookOpen className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{source.title}</p>
+                          {source.notes && <p className="text-xs text-muted-foreground truncate">{source.notes}</p>}
+                          {source.url && <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block">{source.url}</a>}
+                        </div>
+                        <Button size="sm" variant={linked ? "default" : "outline"} className="h-7 text-xs shrink-0 gap-1 pressable" onClick={() => toggleSourceLink(source.id)}>
+                          {linked ? <><Check className="h-3 w-3" /> Verknüpft</> : "Verknüpfen"}
+                        </Button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </TabsContent>

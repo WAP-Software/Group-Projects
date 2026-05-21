@@ -8,10 +8,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Clock, AlertCircle, TrendingUp, File, FileText,
   Table2, Presentation, Link2, ImageIcon, UserPlus,
-  Check, CheckCircle2,
+  Check, CheckCircle2, ChevronDown,
 } from "lucide-react";
 import type { Task, FileRecord, WorkspaceMember, Profile } from "@/types/database";
 import { toast } from "sonner";
+import { FileDetailPanel } from "@/components/files/FileDetailPanel";
+import { TaskDetailPanel } from "@/components/kanban/TaskDetailPanel";
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
@@ -92,6 +94,9 @@ export default function WorkspacePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [popoverId, setPopoverId] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [showDone, setShowDone] = useState(false);
 
   const load = useCallback(async () => {
     const [tRes, fRes, mRes] = await Promise.all([
@@ -134,6 +139,18 @@ export default function WorkspacePage({ params }: Props) {
     toast.success("Deadline gespeichert");
   }
 
+  async function updateTask(id: string, data: Partial<Task>) {
+    const { data: updated } = await supabase.from("tasks").update(data).eq("id", id).select().single();
+    if (updated) setTasks((p) => p.map((t) => t.id === id ? { ...t, ...updated, assignee_ids: (updated as any).assignee_ids ?? t.assignee_ids } : t));
+    return updated;
+  }
+
+  async function deleteTask(id: string) {
+    await supabase.from("tasks").delete().eq("id", id);
+    setTasks((p) => p.filter((t) => t.id !== id));
+    setSelectedTaskId(null);
+  }
+
   async function toggleAssignee(taskId: string, userId: string) {
     const task = tasks.find((t) => t.id === taskId)!;
     const next = task.assignee_ids.includes(userId)
@@ -160,11 +177,30 @@ export default function WorkspacePage({ params }: Props) {
   const noDate = tasks.filter((t) => !t.due_date && t.status !== "done");
 
   const totalTasks = tasks.length;
-  const done = tasks.filter((t) => t.status === "done").length;
-  const pct = totalTasks > 0 ? Math.round((done / totalTasks) * 100) : 0;
+  const doneCount = tasks.filter((t) => t.status === "done").length;
+  const pct = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
   const onTrack = overdue.length === 0;
 
-  const rowProps = { memberMap, members, editingId, setEditingId, popoverId, setPopoverId, onToggleDone: toggleDone, onSaveDeadline: saveDeadline, onToggleAssignee: toggleAssignee };
+  const doneTasks = tasks.filter((t) => t.status === "done");
+
+  function rowProps(item: DeadlineItem) {
+    return {
+      memberMap, members, editingId, setEditingId, popoverId, setPopoverId,
+      onToggleDone: toggleDone, onSaveDeadline: saveDeadline, onToggleAssignee: toggleAssignee,
+      onClick: () => {
+        if (item.kind === "file") setSelectedFile(item.item as FileRecord);
+        else setSelectedTaskId(item.id);
+      },
+    };
+  }
+
+  function noDateRowProps(task: TaskExt) {
+    return {
+      memberMap, members, editingId, setEditingId, popoverId, setPopoverId,
+      onToggleDone: toggleDone, onSaveDeadline: saveDeadline, onToggleAssignee: toggleAssignee,
+      onClick: () => setSelectedTaskId(task.id),
+    };
+  }
 
   if (loading) {
     return (
@@ -188,7 +224,13 @@ export default function WorkspacePage({ params }: Props) {
               : <><AlertCircle className="h-4 w-4" /> {overdue.length} überfällig</>
             }
           </span>
-          <span className="text-sm text-muted-foreground tabular-nums">{done}/{totalTasks} erledigt</span>
+          <button
+            onClick={() => setShowDone((v) => !v)}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors pressable"
+          >
+            {doneCount}/{totalTasks} erledigt
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", showDone && "rotate-180")} />
+          </button>
         </div>
         <Progress value={pct} className="h-2" />
       </div>
@@ -198,7 +240,7 @@ export default function WorkspacePage({ params }: Props) {
         <div>
           <SectionHead label="Überfällig" count={overdue.length} />
           <div className="space-y-1.5">
-            {overdue.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
+            {overdue.map((item) => <Row key={item.id} item={item} {...rowProps(item)} />)}
           </div>
         </div>
       )}
@@ -208,7 +250,7 @@ export default function WorkspacePage({ params }: Props) {
         <div>
           <SectionHead label="Diese Woche" count={thisWeek.length} />
           <div className="space-y-1.5">
-            {thisWeek.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
+            {thisWeek.map((item) => <Row key={item.id} item={item} {...rowProps(item)} />)}
           </div>
         </div>
       )}
@@ -218,7 +260,7 @@ export default function WorkspacePage({ params }: Props) {
         <div>
           <SectionHead label="Später" count={later.length} />
           <div className="space-y-1.5">
-            {later.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
+            {later.map((item) => <Row key={item.id} item={item} {...rowProps(item)} />)}
           </div>
         </div>
       )}
@@ -228,9 +270,23 @@ export default function WorkspacePage({ params }: Props) {
         <div>
           <SectionHead label="Kein Datum" count={noDate.length} />
           <div className="space-y-1.5">
-            {noDate.map((task) => (
-              <Row key={task.id} item={{ kind: "task", id: task.id, item: task, days: 999 }} {...rowProps} />
-            ))}
+            {noDate.map((task) => {
+              const item: DeadlineItem = { kind: "task", id: task.id, item: task, days: 999 };
+              return <Row key={task.id} item={item} {...noDateRowProps(task)} />;
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Done tasks — toggle via progress card */}
+      {showDone && doneTasks.length > 0 && (
+        <div>
+          <SectionHead label="Erledigt" count={doneTasks.length} />
+          <div className="space-y-1.5">
+            {doneTasks.map((task) => {
+              const item: DeadlineItem = { kind: "task", id: task.id, item: task, days: 999 };
+              return <Row key={task.id} item={item} {...noDateRowProps(task)} />;
+            })}
           </div>
         </div>
       )}
@@ -243,6 +299,24 @@ export default function WorkspacePage({ params }: Props) {
           <p className="text-sm text-muted-foreground mt-1">Erstelle Tasks im Kanban oder lade Dateien hoch.</p>
         </div>
       )}
+
+      {/* Panels */}
+      <FileDetailPanel
+        file={selectedFile}
+        workspaceId={workspaceId}
+        open={!!selectedFile}
+        onClose={() => setSelectedFile(null)}
+        onRefresh={load}
+      />
+      <TaskDetailPanel
+        taskId={selectedTaskId}
+        workspaceId={workspaceId}
+        members={members as any}
+        open={!!selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        onUpdate={updateTask}
+        onDelete={deleteTask}
+      />
     </div>
   );
 }
@@ -258,9 +332,10 @@ interface RowProps {
   onToggleDone: (task: TaskExt) => void;
   onSaveDeadline: (id: string, kind: "task" | "file", value: string) => void;
   onToggleAssignee: (taskId: string, userId: string) => void;
+  onClick?: () => void;
 }
 
-function Row({ item, memberMap, members, editingId, setEditingId, popoverId, setPopoverId, onToggleDone, onSaveDeadline, onToggleAssignee }: RowProps) {
+function Row({ item, memberMap, members, editingId, setEditingId, popoverId, setPopoverId, onToggleDone, onSaveDeadline, onToggleAssignee, onClick }: RowProps) {
   const isTask = item.kind === "task";
   const task = isTask ? item.item as TaskExt : null;
   const file = !isTask ? item.item as FileRecord : null;
@@ -272,15 +347,19 @@ function Row({ item, memberMap, members, editingId, setEditingId, popoverId, set
   const hasDeadline = deadlineVal !== "" && days !== 999;
 
   return (
-    <div className={cn(
-      "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 group transition-all",
-      isDone ? "opacity-50 border-border/30" : "border-border/50 hover:border-primary/30 hover:bg-muted/20",
-    )}>
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 group transition-all",
+        isDone ? "opacity-50 border-border/30" : "border-border/50 hover:border-primary/30 hover:bg-muted/20",
+        onClick && "cursor-pointer",
+      )}
+    >
 
       {/* Left: checkbox (task) or file icon */}
       {isTask ? (
         <button
-          onClick={() => onToggleDone(task!)}
+          onClick={(e) => { e.stopPropagation(); onToggleDone(task!); }}
           className={cn(
             "h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors pressable",
             isDone ? "bg-green-500 border-green-500" : "border-muted-foreground/40 hover:border-primary",
@@ -302,7 +381,7 @@ function Row({ item, memberMap, members, editingId, setEditingId, popoverId, set
       </p>
 
       {/* Deadline badge / inline editor */}
-      <div className="shrink-0">
+      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
         {isEditing ? (
           <input
             type="date"
@@ -336,7 +415,7 @@ function Row({ item, memberMap, members, editingId, setEditingId, popoverId, set
 
       {/* Assignees (tasks only) */}
       {isTask && (
-        <div className="relative shrink-0" data-popover>
+        <div className="relative shrink-0" data-popover onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setPopoverId(isPopover ? null : item.id)}
             className="flex items-center pressable"

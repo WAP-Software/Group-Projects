@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { FloatingChat } from "@/components/layout/FloatingChat";
 
 interface Props {
   children: React.ReactNode;
@@ -36,6 +37,7 @@ export default async function WorkspaceLayout({ children, params }: Props) {
       <main className="flex-1 overflow-y-auto bg-background">
         {children}
       </main>
+      <FloatingChat workspaceId={workspaceId} />
     </div>
   );
 }

@@ -1,75 +1,100 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, getInitials, priorityColor, formatBytes, mimeLabel } from "@/lib/utils";
+import { formatDate, getInitials, mimeLabel } from "@/lib/utils";
 import type { Workspace, Task, FileRecord, WorkspaceMember, Profile } from "@/types/database";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import {
-  FileText, Kanban, Users, CheckCircle2, Clock, AlertCircle,
-  Calendar, FolderOpen, Zap, File,
+  Clock, AlertCircle, CheckCircle2, Users, File, FileText,
+  Table2, Presentation, Link2, ImageIcon, ClipboardCheck,
+  Kanban, FolderOpen, ChevronRight,
 } from "lucide-react";
-
 
 interface Props {
   params: Promise<{ workspaceId: string }>;
+}
+
+function deadlineDays(date: string): number {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const d = new Date(date); d.setHours(0, 0, 0, 0);
+  return Math.floor((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function ampelClass(days: number) {
+  if (days <= 0) return { bg: "bg-red-500", text: "text-white", ring: "ring-red-500/30", label: days < 0 ? "Überfällig" : "Heute" };
+  if (days <= 7) return { bg: "bg-yellow-500", text: "text-white", ring: "ring-yellow-500/30", label: `${days}d` };
+  return { bg: "bg-green-500", text: "text-white", ring: "ring-green-500/30", label: `${days}d` };
+}
+
+function FileIcon({ mime }: { mime: string | null }) {
+  if (!mime) return <File className="h-4 w-4 text-muted-foreground" />;
+  if (mime.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />;
+  if (mime === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
+  if (mime.includes("spreadsheet") || mime.includes("excel") || mime.includes("csv")) return <Table2 className="h-4 w-4 text-green-600" />;
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return <Presentation className="h-4 w-4 text-orange-500" />;
+  if (mime === "text/uri-list") return <Link2 className="h-4 w-4 text-blue-500" />;
+  return <File className="h-4 w-4 text-muted-foreground" />;
 }
 
 export default async function WorkspaceOverviewPage({ params }: Props) {
   const { workspaceId } = await params;
   const supabase = await createClient();
 
-  const [wsResult, membersResult, allTasksResult, filesResult, filesCountResult] = await Promise.all([
+  const [wsResult, membersResult, tasksResult, filesResult, reviewsResult] = await Promise.all([
     supabase.from("workspaces").select("*").eq("id", workspaceId).single(),
     supabase.from("workspace_members").select("*, profile:profiles(*)").eq("workspace_id", workspaceId),
     supabase.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
-    supabase.from("files").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(6),
-    supabase.from("files").select("*", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+    supabase.from("files").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+    supabase.from("reviews").select("*, file:files(name, mime_type)").eq("workspace_id", workspaceId).in("status", ["pending", "in_review", "changes_requested"]).order("created_at", { ascending: false }),
   ]);
 
   const ws = wsResult.data as Workspace | null;
   const members = (membersResult.data ?? []) as Array<WorkspaceMember & { profile: Profile }>;
-  const allTasks = (allTasksResult.data ?? []) as Task[];
-  const recentFiles = (filesResult.data ?? []) as FileRecord[];
-  const totalFiles = filesCountResult.count ?? 0;
+  const allTasks = (tasksResult.data ?? []) as Task[];
+  const allFiles = (filesResult.data ?? []) as FileRecord[];
+  const openReviews = (reviewsResult.data ?? []) as Array<{ id: string; title: string; status: string; created_at: string; file: { name: string; mime_type: string | null } | null }>;
 
-  const today = new Date();
-  const in14Days = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-  const upcomingDeadlines = allTasks
-    .filter((t) => t.due_date && t.status !== "done" && new Date(t.due_date) <= in14Days)
-    .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
-    .slice(0, 5);
-
-  const recentTasks = allTasks.slice(0, 5);
   const doneTasks = allTasks.filter((t) => t.status === "done").length;
-  const totalTasks = allTasks.length;
-  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const openTasks = allTasks.filter((t) => t.status !== "done").length;
+  const progressPct = allTasks.length > 0 ? Math.round((doneTasks / allTasks.length) * 100) : 0;
 
-  // Activity feed: merge recent tasks + files
-  const activityItems: Array<{ type: "task" | "file"; title: string; sub: string; time: string; href: string }> = [
-    ...allTasks.slice(0, 6).map((t) => ({
-      type: "task" as const,
-      title: t.title,
-      sub: t.status === "done" ? "Completed" : `Status: ${t.status.replace("_", " ")}`,
-      time: t.updated_at,
-      href: `/workspaces/${workspaceId}/tasks`,
-    })),
-    ...recentFiles.map((f) => ({
-      type: "file" as const,
-      title: f.name,
-      sub: `File · ${mimeLabel(f.mime_type)}`,
-      time: f.created_at,
-      href: `/workspaces/${workspaceId}/files`,
-    })),
-  ]
-    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-    .slice(0, 6);
+  // Deadline items: files with deadline_date + tasks with due_date (not done)
+  type DeadlineItem =
+    | { kind: "file"; id: string; name: string; mime: string | null; days: number; href: string }
+    | { kind: "task"; id: string; name: string; days: number; status: string; href: string };
+
+  const deadlineItems: DeadlineItem[] = [
+    ...allFiles
+      .filter((f) => f.deadline_date)
+      .map((f) => ({
+        kind: "file" as const,
+        id: f.id,
+        name: f.name,
+        mime: f.mime_type,
+        days: deadlineDays(f.deadline_date!),
+        href: `/workspaces/${workspaceId}/workspace`,
+      })),
+    ...allTasks
+      .filter((t) => t.due_date && t.status !== "done")
+      .map((t) => ({
+        kind: "task" as const,
+        id: t.id,
+        name: t.title,
+        days: deadlineDays(t.due_date!),
+        status: t.status,
+        href: `/workspaces/${workspaceId}/workspace`,
+      })),
+  ].sort((a, b) => a.days - b.days);
+
+  const redItems = deadlineItems.filter((d) => d.days <= 0);
+  const yellowItems = deadlineItems.filter((d) => d.days > 0 && d.days <= 7);
+  const greenItems = deadlineItems.filter((d) => d.days > 7);
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto w-full space-y-6">
-      {/* Workspace header */}
+    <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-6">
+      {/* Header */}
       <div className="fade-in stagger-1">
         <div className="flex items-center gap-3 mb-1">
           <div
@@ -91,179 +116,224 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
         )}
       </div>
 
-      {/* Progress + Stats */}
-      <div className="space-y-3 fade-in stagger-2">
-        {totalTasks > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">Overall Progress</span>
-              <span className="text-muted-foreground tabular-nums">{doneTasks}/{totalTasks} tasks done</span>
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 fade-in stagger-2">
+        {[
+          { label: "Mitglieder", value: members.length, icon: Users, color: "text-blue-500" },
+          { label: "Offene Tasks", value: openTasks, icon: Kanban, color: "text-violet-500" },
+          { label: "Dateien", value: allFiles.length, icon: FolderOpen, color: "text-amber-500" },
+          { label: "Erledigt", value: doneTasks, icon: CheckCircle2, color: "text-green-500" },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3">
+            <Icon className={cn("h-5 w-5 shrink-0", color)} />
+            <div>
+              <p className="text-xl font-bold tabular-nums">{value}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
             </div>
-            <Progress value={progressPct} className="h-2" />
+          </div>
+        ))}
+      </div>
+
+      {/* Progress */}
+      {allTasks.length > 0 && (
+        <div className="space-y-1.5 fade-in stagger-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Fortschritt</span>
+            <span className="text-muted-foreground tabular-nums">{doneTasks}/{allTasks.length} Tasks</span>
+          </div>
+          <Progress value={progressPct} className="h-2" />
+        </div>
+      )}
+
+      {/* ── Deadlines (Ampel) ── */}
+      <div className="fade-in stagger-3">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            Deadlines
+          </h2>
+          <Link href={`/workspaces/${workspaceId}/workspace`} className="text-xs text-primary hover:underline flex items-center gap-1">
+            Workspace <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        {deadlineItems.length === 0 ? (
+          <div className="rounded-xl border border-border/50 bg-card p-8 text-center">
+            <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
+            <p className="text-sm font-medium">Keine Deadlines</p>
+            <p className="text-xs text-muted-foreground mt-1">Alle Dateien und Tasks sind ohne Frist.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Red — overdue/today */}
+            {redItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-500 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
+                  Überfällig / Heute ({redItems.length})
+                </p>
+                <div className="space-y-2">
+                  {redItems.map((item) => (
+                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Yellow — within 7 days */}
+            {yellowItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-yellow-500 inline-block" />
+                  Diese Woche ({yellowItems.length})
+                </p>
+                <div className="space-y-2">
+                  {yellowItems.map((item) => (
+                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Green — later */}
+            {greenItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-600 dark:text-green-400 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
+                  Später ({greenItems.length})
+                </p>
+                <div className="space-y-2">
+                  {greenItems.map((item) => (
+                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Members", value: members.length, icon: Users, color: "text-blue-500" },
-            { label: "Open Tasks", value: allTasks.filter((t) => t.status !== "done").length, icon: Kanban, color: "text-violet-500" },
-            { label: "Files", value: totalFiles, icon: FolderOpen, color: "text-amber-500" },
-            { label: "Completed", value: doneTasks, icon: CheckCircle2, color: "text-green-500" },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <Card key={label} className="border-border/50">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-3">
-                  <Icon className={`h-5 w-5 ${color} shrink-0`} />
-                  <div>
-                    <p className="text-2xl font-bold tabular-nums">{value}</p>
-                    <p className="text-xs text-muted-foreground">{label}</p>
+      </div>
+
+      {/* ── Open Reviews ── */}
+      {openReviews.length > 0 && (
+        <div className="fade-in stagger-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+              Offene Reviews
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-white text-[10px] font-bold">{openReviews.length}</span>
+            </h2>
+            <Link href={`/workspaces/${workspaceId}/reviews`} className="text-xs text-primary hover:underline flex items-center gap-1">
+              Alle <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {openReviews.slice(0, 5).map((r) => (
+              <Link key={r.id} href={`/workspaces/${workspaceId}/reviews`}>
+                <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5 hover:bg-muted/30 hover:border-primary/30 transition-all pressable">
+                  <div className="h-8 w-8 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
+                    <ClipboardCheck className="h-4 w-4 text-orange-600 dark:text-orange-300" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{r.title}</p>
+                    {r.file && <p className="text-xs text-muted-foreground truncate">{r.file.name}</p>}
+                  </div>
+                  <ReviewStatusBadge status={r.status} />
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Members ── */}
+      <div className="fade-in stagger-5">
+        <h2 className="font-semibold flex items-center gap-2 mb-3">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          Team
+        </h2>
+        <div className="flex flex-wrap gap-3">
+          {members.map((m) => {
+            const p = m.profile as any;
+            const tasksDone = allTasks.filter((t) => t.assigned_to === m.user_id && t.status === "done").length;
+            const tasksTotal = allTasks.filter((t) => t.assigned_to === m.user_id).length;
+            return (
+              <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card px-3 py-2.5">
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                    {getInitials(p?.full_name ?? p?.email ?? "?")}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-medium">{p?.full_name ?? p?.email}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {m.role}{tasksTotal > 0 ? ` · ${tasksDone}/${tasksTotal}` : ""}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Upcoming Deadlines */}
-        <Card className="border-border/50 fade-in stagger-3">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-orange-500" />
-                Upcoming Deadlines
-              </CardTitle>
-              <Link href={`/workspaces/${workspaceId}/tasks`} className="text-xs text-primary hover:underline">
-                Board →
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {upcomingDeadlines.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3 text-center">No upcoming deadlines</p>
-            ) : (
-              upcomingDeadlines.map((task) => {
-                const daysLeft = Math.ceil((new Date(task.due_date!).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                const urgent = daysLeft <= 2;
-                return (
-                  <Link key={task.id} href={`/workspaces/${workspaceId}/tasks`}>
-                    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                      {urgent
-                        ? <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                        : <Clock className="h-4 w-4 text-muted-foreground shrink-0" />}
-                      <span className="text-sm flex-1 truncate">{task.title}</span>
-                      <Badge variant={urgent ? "destructive" : "secondary"} className="text-xs shrink-0">
-                        {daysLeft === 0 ? "Today" : daysLeft === 1 ? "Tomorrow" : `${daysLeft}d`}
-                      </Badge>
-                    </div>
-                  </Link>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Activity Feed */}
-        <Card className="border-border/50 fade-in stagger-4">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="h-4 w-4 text-yellow-500" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {activityItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3 text-center">No activity yet</p>
-            ) : (
-              activityItems.map((item, i) => (
-                <Link key={i} href={item.href}>
-                  <div className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className={`mt-0.5 h-5 w-5 rounded-md flex items-center justify-center shrink-0 ${item.type === "task" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300" : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"}`}>
-                      {item.type === "task" ? <Kanban className="h-3 w-3" /> : <File className="h-3 w-3" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{item.sub} · {formatDate(item.time)}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Members */}
-        <Card className="border-border/50 fade-in stagger-5">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-blue-500" />
-                Members
-              </CardTitle>
-              <Badge variant="secondary">{members.length}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {members.map((m) => {
-              const p = m.profile as any;
-              const tasksDone = allTasks.filter((t) => t.assigned_to === m.user_id && t.status === "done").length;
-              const tasksTotal = allTasks.filter((t) => t.assigned_to === m.user_id).length;
-              return (
-                <div key={m.id} className="flex items-center gap-3">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                      {getInitials(p?.full_name ?? p?.email ?? "?")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">{p?.full_name ?? p?.email}</p>
-                      <Badge variant="outline" className="text-xs capitalize shrink-0">{m.role}</Badge>
-                    </div>
-                    {tasksTotal > 0 && (
-                      <p className="text-xs text-muted-foreground">{tasksDone}/{tasksTotal} tasks done</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Files */}
-      {recentFiles.length > 0 && (
-        <Card className="border-border/50 fade-in stagger-5">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FolderOpen className="h-4 w-4 text-amber-500" />
-                Recent Files
-              </CardTitle>
-              <Link href={`/workspaces/${workspaceId}/files`} className="text-xs text-primary hover:underline">
-                All files →
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentFiles.map((f) => (
-                <Link key={f.id} href={`/workspaces/${workspaceId}/files`}>
-                  <div className="p-3 rounded-lg border border-border/50 hover:bg-muted/50 hover:border-primary/30 transition-all pressable flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <File className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{f.name}</p>
-                      <p className="text-xs text-muted-foreground">{f.size_bytes ? formatBytes(f.size_bytes) : ""} · {formatDate(f.created_at)}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
+}
+
+function DeadlineRow({
+  item,
+  workspaceId,
+}: {
+  item: { kind: "file" | "task"; id: string; name: string; mime?: string | null; days: number; href: string };
+  workspaceId: string;
+}) {
+  const ampel = ampelClass(item.days);
+  return (
+    <Link href={item.href}>
+      <div className={cn(
+        "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5",
+        "hover:bg-muted/30 transition-all pressable",
+        `ring-1 ${ampel.ring}`,
+        "border-border/50",
+      )}>
+        <div className={cn("h-2 w-2 rounded-full shrink-0 mt-0.5", ampel.bg)} />
+        <div className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
+          {item.kind === "file" ? (
+            <FileIconInline mime={item.mime ?? null} />
+          ) : (
+            <Kanban className="h-3.5 w-3.5 text-violet-500" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{item.name}</p>
+          <p className="text-xs text-muted-foreground">{item.kind === "file" ? "Datei" : "Task"}</p>
+        </div>
+        <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full shrink-0", ampel.bg, ampel.text)}>
+          {item.days <= 0 ? (
+            <AlertCircle className="h-2.5 w-2.5" />
+          ) : (
+            <Clock className="h-2.5 w-2.5" />
+          )}
+          {ampel.label}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function FileIconInline({ mime }: { mime: string | null }) {
+  if (!mime) return <File className="h-3.5 w-3.5 text-muted-foreground" />;
+  if (mime.startsWith("image/")) return <ImageIcon className="h-3.5 w-3.5 text-blue-500" />;
+  if (mime === "application/pdf") return <FileText className="h-3.5 w-3.5 text-red-500" />;
+  if (mime.includes("spreadsheet") || mime.includes("excel") || mime.includes("csv")) return <Table2 className="h-3.5 w-3.5 text-green-600" />;
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return <Presentation className="h-3.5 w-3.5 text-orange-500" />;
+  if (mime === "text/uri-list") return <Link2 className="h-3.5 w-3.5 text-blue-500" />;
+  return <File className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+const REVIEW_STATUS: Record<string, { label: string; cls: string }> = {
+  pending: { label: "Ausstehend", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
+  in_review: { label: "In Review", cls: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+  changes_requested: { label: "Änderungen", cls: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+};
+
+function ReviewStatusBadge({ status }: { status: string }) {
+  const s = REVIEW_STATUS[status] ?? { label: status, cls: "bg-muted text-muted-foreground" };
+  return <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0", s.cls)}>{s.label}</span>;
 }

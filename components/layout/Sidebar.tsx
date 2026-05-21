@@ -6,10 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
-  Kanban,
   GanttChartSquare,
-  FolderOpen,
-  MessageSquare,
   BookOpen,
   Calculator,
   ClipboardCheck,
@@ -18,7 +15,9 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Settings,
+  Layers,
 } from "lucide-react";
 import {
   Tooltip,
@@ -29,18 +28,18 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-const WORKSPACE_LINKS = [
+const MAIN_LINKS = [
   { href: "", label: "Overview", icon: LayoutDashboard },
-  { href: "/files", label: "Files", icon: FolderOpen },
-  { href: "/tasks", label: "Kanban Board", icon: Kanban },
+  { href: "/workspace", label: "Workspace", icon: Layers },
   { href: "/timeline", label: "Timeline", icon: GanttChartSquare },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
+];
+
+const MORE_LINKS = [
+  { href: "/polls", label: "Polls", icon: Vote },
   { href: "/sources", label: "Sources", icon: BookOpen },
   { href: "/formulas", label: "Formulas", icon: Calculator },
-  { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
   { href: "/contributions", label: "Contributions", icon: BarChart3 },
-  { href: "/polls", label: "Polls", icon: Vote },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -52,7 +51,47 @@ interface SidebarProps {
 export function Sidebar({ workspaceId, workspaceName, workspaceColor }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const base = `/workspaces/${workspaceId}`;
+
+  function isActive(href: string) {
+    const to = `${base}${href}`;
+    return href === ""
+      ? pathname === base || pathname === `${base}/`
+      : pathname.startsWith(to);
+  }
+
+  function navLink(href: string, label: string, Icon: React.ElementType) {
+    const to = `${base}${href}`;
+    const active = isActive(href);
+    const link = (
+      <Link
+        key={to}
+        href={to}
+        className={cn(
+          "flex items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium",
+          "transition-colors duration-100",
+          "hover:bg-accent hover:text-accent-foreground",
+          active ? "bg-primary/10 text-primary" : "text-sidebar-foreground",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {!collapsed && label}
+      </Link>
+    );
+    if (collapsed) {
+      return (
+        <Tooltip key={to}>
+          <TooltipTrigger asChild>{link}</TooltipTrigger>
+          <TooltipContent side="right">{label}</TooltipContent>
+        </Tooltip>
+      );
+    }
+    return link;
+  }
+
+  const moreActive = MORE_LINKS.some((l) => isActive(l.href));
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -63,7 +102,7 @@ export function Sidebar({ workspaceId, workspaceName, workspaceColor }: SidebarP
           collapsed ? "w-14" : "w-60",
         )}
       >
-        {/* Logo / Workspace name */}
+        {/* Workspace name */}
         <div className="flex h-14 items-center gap-2 px-3 border-b border-sidebar-border">
           <div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white text-sm font-bold"
@@ -80,66 +119,76 @@ export function Sidebar({ workspaceId, workspaceName, workspaceColor }: SidebarP
 
         <ScrollArea className="flex-1 py-2">
           <nav className="space-y-0.5 px-2">
-            {WORKSPACE_LINKS.map(({ href, label, icon: Icon }) => {
-              const to = `${base}${href}`;
-              const active = href === ""
-                ? pathname === base || pathname === `${base}/`
-                : pathname.startsWith(to);
+            {MAIN_LINKS.map(({ href, label, icon: Icon }) => navLink(href, label, Icon))}
 
-              const link = (
-                <Link
-                  key={to}
-                  href={to}
+            <Separator className="my-2" />
+
+            {/* Mehr section */}
+            {collapsed ? (
+              MORE_LINKS.map(({ href, label, icon: Icon }) => navLink(href, label, Icon))
+            ) : (
+              <>
+                <button
+                  onClick={() => setMoreOpen(!moreOpen)}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium",
-                    "transition-colors duration-100",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-sidebar-foreground",
-                    collapsed && "justify-center px-0",
+                    "w-full flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm font-medium",
+                    "transition-colors duration-100 hover:bg-accent hover:text-accent-foreground",
+                    moreActive ? "text-primary" : "text-sidebar-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {!collapsed && label}
-                </Link>
-              );
-
-              if (collapsed) {
-                return (
-                  <Tooltip key={to}>
-                    <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">{label}</TooltipContent>
-                  </Tooltip>
-                );
-              }
-              return link;
-            })}
+                  <span>Mehr</span>
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", moreOpen && "rotate-180")} />
+                </button>
+                {moreOpen && (
+                  <div className="space-y-0.5 pl-2">
+                    {MORE_LINKS.map(({ href, label, icon: Icon }) => navLink(href, label, Icon))}
+                  </div>
+                )}
+              </>
+            )}
           </nav>
         </ScrollArea>
 
         <Separator />
-        <div className="p-2">
+        <div className="p-2 space-y-0.5">
           {collapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  href="/dashboard"
-                  className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors mx-auto"
-                >
-                  <TrendingUp className="h-4 w-4" />
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">All Workspaces</TooltipContent>
-            </Tooltip>
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={`${base}/settings`}
+                    className={cn("flex h-9 w-9 items-center justify-center rounded-md transition-colors mx-auto",
+                      isActive("/settings") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">Settings</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/dashboard" className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors mx-auto">
+                    <TrendingUp className="h-4 w-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">All Workspaces</TooltipContent>
+              </Tooltip>
+            </>
           ) : (
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            >
-              <TrendingUp className="h-4 w-4" />
-              All Workspaces
-            </Link>
+            <>
+              <Link
+                href={`${base}/settings`}
+                className={cn("flex items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors",
+                  isActive("/settings") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+              <Link href="/dashboard" className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+                <TrendingUp className="h-4 w-4" />
+                All Workspaces
+              </Link>
+            </>
           )}
         </div>
 
@@ -155,11 +204,7 @@ export function Sidebar({ workspaceId, workspaceName, workspaceColor }: SidebarP
           )}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? (
-            <ChevronRight className="h-3 w-3" />
-          ) : (
-            <ChevronLeft className="h-3 w-3" />
-          )}
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
         </button>
       </aside>
     </TooltipProvider>

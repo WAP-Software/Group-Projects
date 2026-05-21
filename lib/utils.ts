@@ -65,14 +65,8 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-export function priorityColor(priority: string): string {
-  const map: Record<string, string> = {
-    low: "text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",
-    medium: "text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-300",
-    high: "text-orange-600 bg-orange-50 dark:bg-orange-950 dark:text-orange-300",
-    urgent: "text-red-600 bg-red-50 dark:bg-red-950 dark:text-red-300",
-  };
-  return map[priority] ?? map.medium;
+export function priorityColor(_priority: string): string {
+  return "text-foreground bg-muted";
 }
 
 export function mimeLabel(mime: string | null): string {

@@ -71,6 +71,7 @@ export interface Task {
   status: "backlog" | "in_progress" | "review" | "done";
   priority: "low" | "medium" | "high" | "urgent";
   assigned_to: string | null;
+  assignee_ids: string[];
   created_by: string | null;
   due_date: string | null;
   start_date: string | null;
@@ -271,7 +272,7 @@ export type Database = {
       };
       tasks: {
         Row: Task;
-        Insert: Omit<Task, "id" | "created_at" | "updated_at"> & { id?: string };
+        Insert: Omit<Task, "id" | "created_at" | "updated_at"> & { id?: string; assignee_ids?: string[] };
         Update: Partial<Omit<Task, "id" | "created_at">>;
         Relationships: [];
       };

@@ -27,7 +27,6 @@ import {
   Sun,
   Search,
   LayoutDashboard,
-  GanttChartSquare,
   BookOpen,
   Calculator,
   ClipboardCheck,
@@ -41,7 +40,6 @@ import type { Profile } from "@/types/database";
 const MAIN_NAV = [
   { href: "", label: "Overview", icon: LayoutDashboard },
   { href: "/workspace", label: "Workspace", icon: Layers },
-  { href: "/timeline", label: "Timeline", icon: GanttChartSquare },
   { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
 ];
 

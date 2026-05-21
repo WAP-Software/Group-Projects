@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
-  GanttChartSquare,
   BookOpen,
   Calculator,
   ClipboardCheck,
@@ -31,7 +30,6 @@ import { Separator } from "@/components/ui/separator";
 const MAIN_LINKS = [
   { href: "", label: "Overview", icon: LayoutDashboard },
   { href: "/workspace", label: "Workspace", icon: Layers },
-  { href: "/timeline", label: "Timeline", icon: GanttChartSquare },
   { href: "/reviews", label: "Peer Review", icon: ClipboardCheck },
 ];
 

@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Settings,
   Layers,
+  FolderOpen,
 } from "lucide-react";
 import {
   Tooltip,
@@ -34,6 +35,7 @@ const MAIN_LINKS = [
 ];
 
 const MORE_LINKS = [
+  { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/polls", label: "Polls", icon: Vote },
   { href: "/sources", label: "Sources", icon: BookOpen },
   { href: "/formulas", label: "Formulas", icon: Calculator },
@@ -134,7 +136,7 @@ export function Sidebar({ workspaceId, workspaceName, workspaceColor }: SidebarP
                     moreActive ? "text-primary" : "text-sidebar-foreground",
                   )}
                 >
-                  <span>Mehr</span>
+                  <span>More</span>
                   <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", moreOpen && "rotate-180")} />
                 </button>
                 {moreOpen && (

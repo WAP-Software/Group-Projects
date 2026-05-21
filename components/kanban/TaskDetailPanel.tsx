@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   Flag, Calendar, Clock, User, Trash2, Plus, Send,
-  Download, X, File, FileText, ImageIcon, Upload, CloudUpload,
+  Download, X, File, FileText, ImageIcon, Upload, CloudUpload, Link2,
 } from "lucide-react";
 
 function parseDueDate(due_date: string | null): { date: string; time: string } {
@@ -72,6 +72,9 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [wsFiles, setWsFiles] = useState<FileRecord[]>([]);
+  const [filePicker, setFilePicker] = useState(false);
+  const [fileSearch, setFileSearch] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const descSaveRef = useRef<ReturnType<typeof setTimeout>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -213,6 +216,24 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
     setAttachments((a) => a.filter((f) => f.id !== attachmentId));
     await supabase.from("task_files").delete().eq("id", attachmentId);
     if (session?.access_token) deleteFromR2(r2Key, session.access_token).catch(() => {});
+  }
+
+  async function openFilePicker() {
+    if (wsFiles.length === 0) {
+      const { data } = await supabase.from("files").select("*").eq("workspace_id", workspaceId).order("name");
+      setWsFiles((data ?? []) as FileRecord[]);
+    }
+    setFilePicker(true);
+    setFileSearch("");
+  }
+
+  async function attachExisting(file: FileRecord) {
+    if (!task) return;
+    if (attachments.some((a) => a.file_id === file.id)) { toast.error("Already attached"); return; }
+    const { data } = await supabase.from("task_files").insert({ task_id: task.id, file_id: file.id }).select().single();
+    if (data) setAttachments((a) => [...a, { ...data, file } as TaskFileRow]);
+    toast.success("File verknüpft");
+    setFilePicker(false);
   }
 
   async function handleDelete() {
@@ -489,6 +510,50 @@ export function TaskDetailPanel({ taskId, workspaceId, members, open, onClose, o
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
                       />
                     </label>
+
+                    <button
+                      onClick={openFilePicker}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                    >
+                      <Link2 className="h-3 w-3" />
+                      Existing file from workspace attach
+                    </button>
+
+                    {filePicker && (
+                      <div className="border border-border rounded-lg bg-card shadow-sm overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                          <input
+                            type="text"
+                            value={fileSearch}
+                            onChange={(e) => setFileSearch(e.target.value)}
+                            placeholder="Search files…"
+                            className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                            autoFocus
+                          />
+                          <button onClick={() => setFilePicker(false)} className="text-muted-foreground hover:text-foreground">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {wsFiles
+                            .filter((f) => f.name.toLowerCase().includes(fileSearch.toLowerCase()))
+                            .filter((f) => !attachments.some((a) => a.file_id === f.id))
+                            .map((f) => (
+                              <button
+                                key={f.id}
+                                onClick={() => attachExisting(f)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted text-left transition-colors"
+                              >
+                                {fileIcon(f.mime_type ?? null)}
+                                <span className="truncate">{f.name}</span>
+                              </button>
+                            ))}
+                          {wsFiles.filter((f) => f.name.toLowerCase().includes(fileSearch.toLowerCase())).filter((f) => !attachments.some((a) => a.file_id === f.id)).length === 0 && (
+                            <p className="text-xs text-muted-foreground text-center py-4">No files found</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {attachments.length > 0 && (
                       <div className="space-y-1.5">

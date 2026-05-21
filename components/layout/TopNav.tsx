@@ -34,6 +34,7 @@ import {
   Vote,
   ChevronDown,
   Layers,
+  FolderOpen,
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
@@ -44,6 +45,7 @@ const MAIN_NAV = [
 ];
 
 const MORE_NAV = [
+  { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/polls", label: "Polls", icon: Vote },
   { href: "/sources", label: "Sources", icon: BookOpen },
   { href: "/formulas", label: "Formulas", icon: Calculator },
@@ -125,7 +127,7 @@ export function TopNav({ profile }: TopNavProps) {
                   onClick={() => setMoreOpen(!moreOpen)}
                   className="w-full flex items-center justify-between gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/70 hover:bg-accent hover:text-foreground transition-colors"
                 >
-                  <span>Mehr</span>
+                  <span>More</span>
                   <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", moreOpen && "rotate-180")} />
                 </button>
                 {moreOpen && (

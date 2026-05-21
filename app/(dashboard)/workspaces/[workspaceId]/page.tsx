@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
-  Clock, AlertCircle, CheckCircle2, Users, File, FileText,
+  Clock, CheckCircle2, Users, File, FileText,
   Table2, Presentation, Link2, ImageIcon, ClipboardCheck,
   Kanban, FolderOpen, ChevronRight,
 } from "lucide-react";
@@ -22,10 +22,10 @@ function deadlineDays(date: string): number {
   return Math.floor((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function ampelClass(days: number) {
-  if (days <= 0) return { bg: "bg-red-500", text: "text-white", ring: "ring-red-500/30", label: days < 0 ? "Überfällig" : "Heute" };
-  if (days <= 7) return { bg: "bg-yellow-500", text: "text-white", ring: "ring-yellow-500/30", label: `${days}d` };
-  return { bg: "bg-green-500", text: "text-white", ring: "ring-green-500/30", label: `${days}d` };
+function deadlineLabel(days: number) {
+  if (days < 0) return `${Math.abs(days)}d überfällig`;
+  if (days === 0) return "Heute";
+  return `${days}d`;
 }
 
 function FileIcon({ mime }: { mime: string | null }) {
@@ -88,10 +88,6 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
       })),
   ].sort((a, b) => a.days - b.days);
 
-  const redItems = deadlineItems.filter((d) => d.days <= 0);
-  const yellowItems = deadlineItems.filter((d) => d.days > 0 && d.days <= 7);
-  const greenItems = deadlineItems.filter((d) => d.days > 7);
-
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-6">
       {/* Header */}
@@ -119,13 +115,13 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 fade-in stagger-2">
         {[
-          { label: "Mitglieder", value: members.length, icon: Users, color: "text-blue-500" },
-          { label: "Offene Tasks", value: openTasks, icon: Kanban, color: "text-violet-500" },
-          { label: "Dateien", value: allFiles.length, icon: FolderOpen, color: "text-amber-500" },
-          { label: "Erledigt", value: doneTasks, icon: CheckCircle2, color: "text-green-500" },
-        ].map(({ label, value, icon: Icon, color }) => (
+          { label: "Mitglieder", value: members.length, icon: Users },
+          { label: "Offene Tasks", value: openTasks, icon: Kanban },
+          { label: "Dateien", value: allFiles.length, icon: FolderOpen },
+          { label: "Erledigt", value: doneTasks, icon: CheckCircle2 },
+        ].map(({ label, value, icon: Icon }) => (
           <div key={label} className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3">
-            <Icon className={cn("h-5 w-5 shrink-0", color)} />
+            <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
             <div>
               <p className="text-xl font-bold tabular-nums">{value}</p>
               <p className="text-xs text-muted-foreground">{label}</p>
@@ -159,54 +155,15 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
 
         {deadlineItems.length === 0 ? (
           <div className="rounded-xl border border-border/50 bg-card p-8 text-center">
-            <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
+            <CheckCircle2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm font-medium">Keine Deadlines</p>
             <p className="text-xs text-muted-foreground mt-1">Alle Dateien und Tasks sind ohne Frist.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Red — overdue/today */}
-            {redItems.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-red-500 mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
-                  Überfällig / Heute ({redItems.length})
-                </p>
-                <div className="space-y-2">
-                  {redItems.map((item) => (
-                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Yellow — within 7 days */}
-            {yellowItems.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-yellow-600 dark:text-yellow-400 mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-yellow-500 inline-block" />
-                  Diese Woche ({yellowItems.length})
-                </p>
-                <div className="space-y-2">
-                  {yellowItems.map((item) => (
-                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Green — later */}
-            {greenItems.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-green-600 dark:text-green-400 mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
-                  Später ({greenItems.length})
-                </p>
-                <div className="space-y-2">
-                  {greenItems.map((item) => (
-                    <DeadlineRow key={item.id} item={item} workspaceId={workspaceId} />
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="space-y-2">
+            {deadlineItems.map((item) => (
+              <DeadlineRow key={item.id} item={item} />
+            ))}
           </div>
         )}
       </div>
@@ -218,7 +175,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
             <h2 className="font-semibold flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
               Offene Reviews
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-white text-[10px] font-bold">{openReviews.length}</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground text-[10px] font-bold">{openReviews.length}</span>
             </h2>
             <Link href={`/workspaces/${workspaceId}/reviews`} className="text-xs text-primary hover:underline flex items-center gap-1">
               Alle <ChevronRight className="h-3 w-3" />
@@ -228,8 +185,8 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
             {openReviews.slice(0, 5).map((r) => (
               <Link key={r.id} href={`/workspaces/${workspaceId}/reviews`}>
                 <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5 hover:bg-muted/30 hover:border-primary/30 transition-all pressable">
-                  <div className="h-8 w-8 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
-                    <ClipboardCheck className="h-4 w-4 text-orange-600 dark:text-orange-300" />
+                  <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                    <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{r.title}</p>
@@ -257,7 +214,7 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
             return (
               <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border/50 bg-card px-3 py-2.5">
                 <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                  <AvatarFallback className="text-xs bg-muted text-muted-foreground">
                     {getInitials(p?.full_name ?? p?.email ?? "?")}
                   </AvatarFallback>
                 </Avatar>
@@ -278,39 +235,26 @@ export default async function WorkspaceOverviewPage({ params }: Props) {
 
 function DeadlineRow({
   item,
-  workspaceId,
 }: {
   item: { kind: "file" | "task"; id: string; name: string; mime?: string | null; days: number; href: string };
-  workspaceId: string;
 }) {
-  const ampel = ampelClass(item.days);
   return (
     <Link href={item.href}>
-      <div className={cn(
-        "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5",
-        "hover:bg-muted/30 transition-all pressable",
-        `ring-1 ${ampel.ring}`,
-        "border-border/50",
-      )}>
-        <div className={cn("h-2 w-2 rounded-full shrink-0 mt-0.5", ampel.bg)} />
+      <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card px-3 py-2.5 hover:bg-muted/30 transition-all pressable">
         <div className="h-7 w-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
           {item.kind === "file" ? (
             <FileIconInline mime={item.mime ?? null} />
           ) : (
-            <Kanban className="h-3.5 w-3.5 text-violet-500" />
+            <Kanban className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{item.name}</p>
           <p className="text-xs text-muted-foreground">{item.kind === "file" ? "Datei" : "Task"}</p>
         </div>
-        <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full shrink-0", ampel.bg, ampel.text)}>
-          {item.days <= 0 ? (
-            <AlertCircle className="h-2.5 w-2.5" />
-          ) : (
-            <Clock className="h-2.5 w-2.5" />
-          )}
-          {ampel.label}
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground shrink-0">
+          <Clock className="h-2.5 w-2.5" />
+          {deadlineLabel(item.days)}
         </span>
       </div>
     </Link>
@@ -328,9 +272,9 @@ function FileIconInline({ mime }: { mime: string | null }) {
 }
 
 const REVIEW_STATUS: Record<string, { label: string; cls: string }> = {
-  pending: { label: "Ausstehend", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
-  in_review: { label: "In Review", cls: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
-  changes_requested: { label: "Änderungen", cls: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  pending: { label: "Ausstehend", cls: "bg-muted text-muted-foreground" },
+  in_review: { label: "In Review", cls: "bg-muted text-foreground" },
+  changes_requested: { label: "Änderungen nötig", cls: "bg-muted text-foreground font-semibold" },
 };
 
 function ReviewStatusBadge({ status }: { status: string }) {

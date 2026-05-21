@@ -38,9 +38,8 @@ function deadlineLabel(days: number): string {
 }
 
 function badgeCls(days: number): string {
-  if (days <= 0) return "bg-red-500 text-white";
-  if (days <= 7) return "bg-yellow-500 text-white";
-  return "bg-green-500 text-white";
+  if (days <= 0) return "bg-foreground text-background";
+  return "bg-muted text-foreground";
 }
 
 function FileIcon({ mime }: { mime: string | null }) {
@@ -74,10 +73,10 @@ function AvatarStack({ ids, memberMap }: { ids: string[]; memberMap: Record<stri
   );
 }
 
-function SectionHead({ label, dotCls, textCls, count }: { label: string; dotCls: string; textCls: string; count: number }) {
+function SectionHead({ label, count }: { label: string; count: number }) {
   return (
-    <p className={cn("text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5", textCls)}>
-      <span className={cn("h-2 w-2 rounded-full inline-block shrink-0", dotCls)} />
+    <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground flex items-center gap-1.5">
+      <span className="h-1.5 w-1.5 rounded-full inline-block shrink-0 bg-muted-foreground/50" />
       {label} ({count})
     </p>
   );
@@ -183,7 +182,7 @@ export default function WorkspacePage({ params }: Props) {
       {/* Progress card */}
       <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className={cn("flex items-center gap-1.5 text-sm font-semibold", onTrack ? "text-green-600 dark:text-green-400" : "text-red-500")}>
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             {onTrack
               ? <><TrendingUp className="h-4 w-4" /> On Track</>
               : <><AlertCircle className="h-4 w-4" /> {overdue.length} überfällig</>
@@ -197,7 +196,7 @@ export default function WorkspacePage({ params }: Props) {
       {/* Overdue — pinned */}
       {overdue.length > 0 && (
         <div>
-          <SectionHead label="Überfällig" dotCls="bg-red-500" textCls="text-red-500" count={overdue.length} />
+          <SectionHead label="Überfällig" count={overdue.length} />
           <div className="space-y-1.5">
             {overdue.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
           </div>
@@ -207,7 +206,7 @@ export default function WorkspacePage({ params }: Props) {
       {/* This week */}
       {thisWeek.length > 0 && (
         <div>
-          <SectionHead label="Diese Woche" dotCls="bg-yellow-500" textCls="text-yellow-600 dark:text-yellow-400" count={thisWeek.length} />
+          <SectionHead label="Diese Woche" count={thisWeek.length} />
           <div className="space-y-1.5">
             {thisWeek.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
           </div>
@@ -217,7 +216,7 @@ export default function WorkspacePage({ params }: Props) {
       {/* Later */}
       {later.length > 0 && (
         <div>
-          <SectionHead label="Später" dotCls="bg-green-500" textCls="text-green-600 dark:text-green-400" count={later.length} />
+          <SectionHead label="Später" count={later.length} />
           <div className="space-y-1.5">
             {later.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
           </div>
@@ -227,7 +226,7 @@ export default function WorkspacePage({ params }: Props) {
       {/* No deadline tasks */}
       {noDate.length > 0 && (
         <div>
-          <SectionHead label="Kein Datum" dotCls="bg-muted-foreground/40" textCls="text-muted-foreground" count={noDate.length} />
+          <SectionHead label="Kein Datum" count={noDate.length} />
           <div className="space-y-1.5">
             {noDate.map((task) => (
               <Row key={task.id} item={{ kind: "task", id: task.id, item: task, days: 999 }} {...rowProps} />
@@ -276,7 +275,6 @@ function Row({ item, memberMap, members, editingId, setEditingId, popoverId, set
     <div className={cn(
       "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 group transition-all",
       isDone ? "opacity-50 border-border/30" : "border-border/50 hover:border-primary/30 hover:bg-muted/20",
-      days <= 0 && !isDone ? "border-red-200 dark:border-red-900/60 bg-red-50/40 dark:bg-red-950/20" : "",
     )}>
 
       {/* Left: checkbox (task) or file icon */}
